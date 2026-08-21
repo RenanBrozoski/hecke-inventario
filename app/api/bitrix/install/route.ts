@@ -5,6 +5,7 @@ import { invalidateHandshakesForPortal } from '@/src/modules/auth/handshake'
 import { maskSecret } from '@/src/modules/bitrix/crypto'
 import { inngest } from '@/src/lib/inngest/client'
 import { logger } from '@/src/modules/common/logger'
+import { resolvePortalDomain } from '@/src/modules/bitrix/portal-domain'
 import { extractClientIp, isRateLimited } from '@/src/modules/common/rate-limit'
 
 export const dynamic = 'force-dynamic'
@@ -72,7 +73,11 @@ export async function POST(request: Request): Promise<NextResponse> {
     return htmlResponse(installErrorHtml('Requisição inválida (payload ilegível).'), 400)
   }
 
-  const domain = form.get('DOMAIN')?.toString()
+  // `DOMAIN` não é garantido no payload — ver resolvePortalDomain.
+  const domain = resolvePortalDomain(
+    form.get('DOMAIN')?.toString(),
+    form.get('SERVER_ENDPOINT')?.toString(),
+  )
   const memberId = form.get('member_id')?.toString()
   const authId = form.get('AUTH_ID')?.toString()
   const refreshId = form.get('REFRESH_ID')?.toString()
@@ -85,7 +90,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     // Diagnóstico: dizer QUAL campo faltou. São nomes de campo, nunca valores —
     // a mensagem aparece no iframe do Bitrix24 e não pode vazar credencial.
     const faltando = [
-      !domain && 'DOMAIN',
+      !domain && 'DOMAIN (ou SERVER_ENDPOINT)',
       !memberId && 'member_id',
       !authId && 'AUTH_ID',
       !refreshId && 'REFRESH_ID',

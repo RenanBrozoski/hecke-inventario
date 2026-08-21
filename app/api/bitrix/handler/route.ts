@@ -3,6 +3,7 @@ import { prisma } from '@/src/lib/prisma'
 import { fetchCurrentUserWithContextToken } from '@/src/modules/bitrix/client'
 import { bootstrapUserFromContext } from '@/src/modules/bitrix/bootstrap-user'
 import { createHandshake } from '@/src/modules/auth/handshake'
+import { resolvePortalDomain } from '@/src/modules/bitrix/portal-domain'
 import { logger } from '@/src/modules/common/logger'
 import { extractClientIp, isRateLimited } from '@/src/modules/common/rate-limit'
 
@@ -41,7 +42,11 @@ export async function POST(request: Request): Promise<NextResponse> {
     return errorHtml('Requisição inválida.', 400)
   }
 
-  const domain = form.get('DOMAIN')?.toString()
+  // `DOMAIN` não é garantido no payload — ver resolvePortalDomain.
+  const domain = resolvePortalDomain(
+    form.get('DOMAIN')?.toString(),
+    form.get('SERVER_ENDPOINT')?.toString(),
+  )
   const memberId = form.get('member_id')?.toString()
   const authId = form.get('AUTH_ID')?.toString()
 
@@ -64,7 +69,10 @@ export async function POST(request: Request): Promise<NextResponse> {
   try {
     currentUser = await fetchCurrentUserWithContextToken(domain, authId)
   } catch (error) {
-    logger.error({ portalId: portal.id, err: error }, 'handler: falha ao validar usuário com user.current')
+    logger.error(
+      { portalId: portal.id, err: error },
+      'handler: falha ao validar usuário com user.current',
+    )
     return errorHtml('Não foi possível validar sua identidade no Bitrix24.')
   }
 
