@@ -82,11 +82,32 @@ export async function POST(request: Request): Promise<NextResponse> {
   const scopeRaw = form.get('SCOPE')?.toString()
 
   if (!domain || !memberId || !authId || !refreshId) {
+    // Diagnóstico: dizer QUAL campo faltou. São nomes de campo, nunca valores —
+    // a mensagem aparece no iframe do Bitrix24 e não pode vazar credencial.
+    const faltando = [
+      !domain && 'DOMAIN',
+      !memberId && 'member_id',
+      !authId && 'AUTH_ID',
+      !refreshId && 'REFRESH_ID',
+    ].filter(Boolean)
+    const recebidos = [...form.keys()].sort().join(', ') || '(nenhum)'
     logger.warn(
-      { hasDomain: Boolean(domain), hasMemberId: Boolean(memberId), hasAuthId: Boolean(authId) },
+      {
+        faltando,
+        recebidos,
+        hasDomain: Boolean(domain),
+        hasMemberId: Boolean(memberId),
+        hasAuthId: Boolean(authId),
+      },
       'install: payload incompleto',
     )
-    return htmlResponse(installErrorHtml('Dados de instalação incompletos.'), 400)
+    return htmlResponse(
+      installErrorHtml(
+        `Dados de instalação incompletos. Faltou: ${faltando.join(', ')}. ` +
+          `O Bitrix24 enviou: ${recebidos}.`,
+      ),
+      400,
+    )
   }
 
   // Validação obrigatória ANTES de qualquer persistência: nunca confiamos nos
@@ -95,12 +116,19 @@ export async function POST(request: Request): Promise<NextResponse> {
   try {
     currentUser = await fetchCurrentUserWithContextToken(domain, authId)
   } catch (error) {
-    logger.error({ domain, memberId, err: error }, 'install: falha ao validar AUTH_ID com user.current')
-    return htmlResponse(installErrorHtml('Não foi possível validar as credenciais recebidas do Bitrix24.'))
+    logger.error(
+      { domain, memberId, err: error },
+      'install: falha ao validar AUTH_ID com user.current',
+    )
+    return htmlResponse(
+      installErrorHtml('Não foi possível validar as credenciais recebidas do Bitrix24.'),
+    )
   }
 
   if (currentUser.ACTIVE === false) {
-    return htmlResponse(installErrorHtml('O usuário que iniciou a instalação está inativo no Bitrix24.'))
+    return htmlResponse(
+      installErrorHtml('O usuário que iniciou a instalação está inativo no Bitrix24.'),
+    )
   }
 
   const expiresAt = new Date(Date.now() + Number(authExpires ?? 3600) * 1000)
@@ -140,7 +168,10 @@ export async function POST(request: Request): Promise<NextResponse> {
   // Higiene de segurança em toda (re)instalação: nenhum handshake emitido antes
   // dela continua valendo (item 5 da estabilização).
   await invalidateHandshakesForPortal(portal.id).catch((error) => {
-    logger.error({ portalId: portal.id, err: error }, 'install: falha ao invalidar handshakes antigos')
+    logger.error(
+      { portalId: portal.id, err: error },
+      'install: falha ao invalidar handshakes antigos',
+    )
   })
 
   // Sincronização inicial disparada via Inngest, mas NÃO aguardada — não deve
@@ -148,7 +179,10 @@ export async function POST(request: Request): Promise<NextResponse> {
   await inngest
     .send({ name: 'bitrix/portal.sync.requested', data: { portalId: portal.id } })
     .catch((error) => {
-      logger.error({ portalId: portal.id, err: error }, 'install: falha ao agendar sincronização inicial')
+      logger.error(
+        { portalId: portal.id, err: error },
+        'install: falha ao agendar sincronização inicial',
+      )
     })
 
   return htmlResponse(installSuccessHtml())
