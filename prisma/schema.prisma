@@ -1,0 +1,865 @@
+
+// Fase 0: fundação (JobExecution). Fase 1: integração com o Aplicativo Local do Bitrix24
+// (BitrixPortal/BitrixUser/BitrixDepartment/BitrixHandshake). Form/Workflow/Request nas fases seguintes.
+// Ver docs/01-planejamento.md para o modelo de dados completo planejado.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  // Conexão pooled — usada em runtime pela aplicação (funções serverless da Vercel).
+  url       = env("DATABASE_URL")
+  // Conexão direta (sem pooler) — usada só por `prisma migrate`.
+  directUrl = env("DIRECT_URL")
+}
+enum JobExecutionStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+/// Rastreia a execução de qualquer ação externa/assíncrona disparada via Inngest
+/// (sync com o Bitrix24, notificações, criação de tarefas, etc.), garantindo que
+/// reexecuções da mesma função não dupliquem o efeito colateral.
+model JobExecution {
+  id             String             @id @default(cuid())
+  idempotencyKey String             @unique
+  jobType        String
+  status         JobExecutionStatus @default(PENDING)
+  attempts       Int                @default(0)
+  lastAttemptAt  DateTime?
+  result         Json?
+  errorMessage   String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  @@index([jobType, status])
+  @@map("job_executions")
+}
+
+// ---------------------------------------------------------------------------
+// Fase 1 — Aplicativo Local do Bitrix24 (embedded)
+// ---------------------------------------------------------------------------
+
+enum BitrixPortalStatus {
+  /// Instalação recebida, ainda validando o contexto (não usar para autorizar nada).
+  PENDING
+  /// Token validado com user.current, tokens persistidos, instalação confirmada.
+  ACTIVE
+  /// Refresh do token falhou de forma definitiva (ex.: refresh_token revogado).
+  TOKEN_INVALID
+  /// Aplicativo removido no portal (reservado — endpoint de desinstalação é Fase 2+).
+  UNINSTALLED
+}
+
+/// Estado da sincronização de usuários/departamentos, separado do status da
+/// instalação: um portal pode estar ACTIVE com a sincronização ainda PENDING
+/// ou em ERROR, sem que isso bloqueie o uso do restante do sistema.
+enum BitrixSyncStatus {
+  NEVER_RUN
+  PENDING
+  RUNNING
+  SUCCESS
+  ERROR
+}
+
+/// Uma instalação do Aplicativo Local em um portal Bitrix24.
+/// `memberId` é a identidade estável da instalação (sobrevive a troca de domínio);
+/// `domain` é único porque, na prática, corresponde 1:1 a uma instalação ativa.
+model BitrixPortal {
+  id       String @id @default(cuid())
+  domain   String @unique
+  memberId String @unique
+
+  /// Credencial da INSTALAÇÃO (não do usuário que abriu o app por último) — usada
+  /// pelo client centralizado para sync e jobs de sistema. Ver src/modules/bitrix/client.ts.
+  accessTokenEncrypted  String
+  refreshTokenEncrypted String
+  tokenExpiresAt        DateTime
+  scopes                String[]
+
+  status                  BitrixPortalStatus @default(PENDING)
+  /// Quem instalou o app PELA PRIMEIRA VEZ — preservado em reinstalações (ver
+  /// portal-credentials.ts). Alimenta isPortalAdministrator(); trocar o "dono"
+  /// deste portal é uma ação deliberada (BITRIX_EXTRA_ADMIN_USER_IDS ou, futuramente,
+  /// o módulo de permissões), não um efeito colateral de clicar em "reinstalar".
+  installedByBitrixUserId String
+  /// Data da PRIMEIRA instalação — preservada em reinstalações.
+  installedAt             DateTime
+
+  /// Incrementada a cada reinstalação (e, no futuro, em qualquer desativação ou
+  /// incidente de segurança do portal). Embutida no JWT de sessão — mudar este
+  /// valor invalida de uma vez todas as sessões emitidas antes, sem precisar
+  /// guardar cada sessão individualmente no banco (ver session.ts/require-session.ts).
+  sessionVersion Int @default(1)
+
+  syncStatus           BitrixSyncStatus @default(NEVER_RUN)
+  lastSyncAt           DateTime?
+  lastSyncErrorAt      DateTime?
+  lastSyncErrorMessage String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users           BitrixUser[]
+  departments     BitrixDepartment[]
+  handshakes      BitrixHandshake[]
+  auditLogs       AuditLog[]
+
+
+  // Domínio de Inventário. Todas as relações são escopadas pelo portal;
+  // os espelhos BitrixUser/BitrixDepartment nunca são usados como substitutos
+  // dos snapshots legados de pessoas e setores.
+  inventoryRoleAssignments    InventoryRoleAssignment[]
+  inventoryCategories         InventoryCategory[]
+  inventoryFields             InventoryField[]
+  inventoryDepartments        InventoryDepartment[]
+  inventoryLocations          InventoryLocation[]
+  inventoryPeople             InventoryPerson[]
+  inventoryEquipment          InventoryEquipment[]
+  inventoryMovements          InventoryMovement[]
+  inventoryExtensions         InventoryExtension[]
+  inventoryReceivings         InventoryReceiving[]
+  inventoryCustomModules      InventoryCustomModule[]
+  inventoryCustomModuleFields InventoryCustomModuleField[]
+  inventoryCustomRecords      InventoryCustomRecord[]
+  inventoryTerms              InventoryTerm[]
+  inventoryAttachments        InventoryAttachment[]
+  inventoryBlobCleanups       InventoryBlobCleanup[]
+  inventoryImportRuns         InventoryImportRun[]
+
+  @@map("bitrix_portals")
+}
+
+/// Espelho local (somente leitura pelo resto do sistema) de um usuário do Bitrix24.
+/// Nunca é excluído — registros ausentes de uma sincronização completa são marcados
+/// `active = false` para preservar o histórico de solicitações vinculadas a eles.
+model BitrixUser {
+  id       String       @id @default(cuid())
+  portalId String
+  portal   BitrixPortal @relation(fields: [portalId], references: [id], onDelete: Restrict)
+
+  bitrixUserId String
+  firstName    String?
+  lastName     String?
+  fullName     String
+  email        String?
+  position     String?
+  active       Boolean @default(true)
+
+  /// IDs (como string) dos departamentos do Bitrix24 aos quais o usuário pertence.
+  departmentIds String[]
+
+  /// Derivado da estrutura departamental (ver src/modules/bitrix/manager-rule.ts) —
+  /// nulo sempre que a regra não permitir uma inferência segura.
+  managerBitrixUserId String?
+
+  lastSyncedAt   DateTime
+  /// Identificador da execução de sync que mais recentemente "viu" este registro —
+  /// usado para marcar como inativos só depois de uma sincronização completa e bem-sucedida.
+  lastSeenSyncId String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([portalId, bitrixUserId])
+  @@index([portalId, active])
+  @@index([portalId, lastSyncedAt])
+  @@map("bitrix_users")
+}
+
+/// Espelho local (somente leitura pelo resto do sistema) de um departamento do Bitrix24.
+model BitrixDepartment {
+  id       String       @id @default(cuid())
+  portalId String
+  portal   BitrixPortal @relation(fields: [portalId], references: [id], onDelete: Restrict)
+
+  bitrixDepartmentId       String
+  name                     String
+  parentBitrixDepartmentId String?
+  headBitrixUserId         String?
+  active                   Boolean @default(true)
+
+  lastSyncedAt   DateTime
+  lastSeenSyncId String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([portalId, bitrixDepartmentId])
+  @@index([portalId, active])
+  @@index([portalId, lastSyncedAt])
+  @@map("bitrix_departments")
+}
+
+/// Código de handshake de uso único entre `/api/bitrix/handler` e `/api/auth/exchange`.
+/// Só o hash do código é armazenado; o código bruto nunca toca o banco.
+/// Expira em ~60s e é limpo por rotina periódica (ver src/inngest/functions/cleanup-handshakes.ts).
+model BitrixHandshake {
+  id       String       @id @default(cuid())
+  codeHash String       @unique
+  portalId String
+  portal   BitrixPortal @relation(fields: [portalId], references: [id], onDelete: Cascade)
+
+  bitrixUserId String
+  /// Contexto mínimo (ex.: placement) — nunca tokens ou dados pessoais.
+  context      Json?
+
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([expiresAt])
+  @@map("bitrix_handshakes")
+}
+
+
+
+
+
+
+
+
+
+/// Log de auditoria transversal — nunca apagado. `metadata` guarda só um
+/// resumo seguro da operação (ex.: {versionNumber, fieldCount}), nunca o
+/// schema completo nem dados sensíveis.
+model AuditLog {
+  id           String       @id @default(cuid())
+  portalId     String
+  portal       BitrixPortal @relation(fields: [portalId], references: [id], onDelete: Restrict)
+  bitrixUserId String
+  action       String
+  entityType   String
+  entityId     String
+  metadata     Json?
+  createdAt    DateTime     @default(now())
+
+  @@index([portalId, entityType, entityId])
+  @@index([portalId, createdAt])
+  @@map("audit_logs")
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// ---------------------------------------------------------------------------
+// Inventário de ativos de TI
+// ---------------------------------------------------------------------------
+//
+// O inventário legado possui pessoas e setores históricos que não existem
+// necessariamente no Bitrix24. Por isso, os vínculos Bitrix abaixo são IDs
+// opcionais de reconciliação; nome/setor e snapshots continuam sendo a fonte
+// do histórico. `legacySource` + `legacyId` tornam o import idempotente sem
+// transformar IDs numéricos do SQLite em chaves globais.
+
+enum InventoryRole {
+  ADMIN
+  OPERATOR
+  VIEWER
+}
+
+enum InventoryEquipmentStatus {
+  ACTIVE
+  STOCK
+  MAINTENANCE
+  BROKEN
+  LOANED
+  INACTIVE
+}
+
+enum InventoryPersonStatus {
+  ACTIVE
+  ON_LEAVE
+  TERMINATED
+}
+
+enum InventoryEmploymentType {
+  CLT
+  PJ
+  INTERN
+  TEMPORARY
+  OTHER
+}
+
+enum InventoryFieldType {
+  TEXT
+  TEXTAREA
+  NUMBER
+  DATE
+  SELECT
+  BOOLEAN
+  PASSWORD
+  MAC
+  IP
+}
+
+enum InventoryMatchStatus {
+  UNREVIEWED
+  MATCHED
+  AMBIGUOUS
+  UNMATCHED
+  REJECTED
+}
+
+enum InventoryMovementOrigin {
+  MANUAL
+  IMPORT
+  INITIAL_REGISTRATION
+  BULK_TRANSFER
+}
+
+enum InventoryTermType {
+  DELIVERY
+  RESPONSIBILITY
+  RETURN
+  TRANSFER
+}
+
+enum InventoryAttachmentEntityType {
+  EQUIPMENT
+  PERSON
+  TERM
+  CUSTOM_RECORD
+}
+
+enum InventoryImportStatus {
+  RUNNING
+  SUCCESS
+  FAILED
+}
+
+/// Papel específico do módulo. Administradores do portal sempre recebem
+/// ADMIN em runtime, mesmo sem linha aqui; os demais usuários podem ser
+/// promovidos a OPERATOR ou mantidos como VIEWER.
+model InventoryRoleAssignment {
+  id       String       @id @default(cuid())
+  portalId String
+  portal   BitrixPortal @relation(fields: [portalId], references: [id], onDelete: Restrict)
+
+  bitrixUserId          String
+  role                  InventoryRole
+  createdByBitrixUserId String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([portalId, bitrixUserId])
+  @@index([portalId, role])
+  @@map("inventory_role_assignments")
+}
+
+model InventoryCategory {
+  id       String       @id @default(cuid())
+  portalId String
+  portal   BitrixPortal @relation(fields: [portalId], references: [id], onDelete: Restrict)
+
+  legacySource String?
+  legacyId     Int?
+
+  name        String
+  prefix      String?
+  icon        String  @default("box-seam")
+  description String?
+  sortOrder   Int     @default(100)
+  active      Boolean @default(true)
+  revision    Int     @default(1)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  fields    InventoryField[]
+  equipment InventoryEquipment[]
+
+  @@unique([portalId, name])
+  @@unique([portalId, legacySource, legacyId])
+  @@index([portalId, active, sortOrder])
+  @@map("inventory_categories")
+}
+
+model InventoryField {
+  id       String       @id @default(cuid())
+  portalId String
+  portal   BitrixPortal @relation(fields: [portalId], references: [id], onDelete: Restrict)
+
+  categoryId String
+  category   InventoryCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  legacySource String?
+  legacyId     Int?
+
+  key         String
+  label       String
+  type        InventoryFieldType @default(TEXT)
+  options     String[]
+  sortOrder   Int                @default(100)
+  required    Boolean            @default(false)
+  listVisible Boolean            @default(false)
+  active      Boolean            @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([categoryId, key])
+  @@unique([portalId, legacySource, legacyId])
+  @@index([portalId, categoryId, active, sortOrder])
+  @@map("inventory_fields")
+}
+
+model InventoryDepartment {
+  id       String       @id @default(cuid())
+  portalId String
+  portal   BitrixPortal @relation(fields: [portalId], references: [id], onDelete: Restrict)
+
+  legacySource String?
+  legacyId     Int?
+
+  name               String
+  description        String?
+  bitrixDepartmentId String?
+  bitrixMatchStatus  InventoryMatchStatus @default(UNREVIEWED)
+  bitrixMatchMethod  String?
+  active             Boolean              @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  people        InventoryPerson[]
+  equipment     InventoryEquipment[]
+  movementsFrom InventoryMovement[]  @relation("InventoryMovementFromDepartment")
+  movementsTo   InventoryMovement[]  @relation("InventoryMovementToDepartment")
+
+  @@unique([portalId, name])
+  @@unique([portalId, legacySource, legacyId])
+  @@index([portalId, active, name])
+  @@index([portalId, bitrixDepartmentId])
+  @@map("inventory_departments")
+}
+
+model InventoryLocation {
+  id       String       @id @default(cuid())
+  portalId String
+  portal   BitrixPortal @relation(fields: [portalId], references: [id], onDelete: Restrict)
+
+  legacySource String?
+  legacyId     Int?
+
+  name        String
+  description String?
+  active      Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  equipment InventoryEquipment[]
+
+  @@unique([portalId, name])
+  @@unique([portalId, legacySource, legacyId])
+  @@index([portalId, active, name])
+  @@map("inventory_locations")
+}
+
+model InventoryPerson {
+  id       String       @id @default(cuid())
+  portalId String
+  portal   BitrixPortal @relation(fields: [portalId], references: [id], onDelete: Restrict)
+
+  legacySource String?
+  legacyId     Int?
+
+  name           String
+  departmentId   String?
+  department     InventoryDepartment?     @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  title          String?
+  email          String?
+  employeeNumber String?
+  employmentType InventoryEmploymentType?
+  status         InventoryPersonStatus    @default(ACTIVE)
+  notes          String?
+
+  bitrixUserId      String?
+  bitrixMatchStatus InventoryMatchStatus @default(UNREVIEWED)
+  bitrixMatchMethod String?
+  archivedAt        DateTime?
+  revision          Int                  @default(1)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  equipment          InventoryEquipment[]
+  movementsFrom      InventoryMovement[]  @relation("InventoryMovementFromPerson")
+  movementsTo        InventoryMovement[]  @relation("InventoryMovementToPerson")
+  termsAsOrigin      InventoryTerm[]      @relation("InventoryTermOriginPerson")
+  termsAsDestination InventoryTerm[]      @relation("InventoryTermDestinationPerson")
+
+  @@unique([portalId, legacySource, legacyId])
+  @@unique([portalId, bitrixUserId])
+  @@index([portalId, status, name])
+  @@index([portalId, departmentId])
+  @@index([portalId, bitrixUserId])
+  @@map("inventory_people")
+}
+
+model InventoryEquipment {
+  id       String       @id @default(cuid())
+  portalId String
+  portal   BitrixPortal @relation(fields: [portalId], references: [id], onDelete: Restrict)
+
+  legacySource String?
+  legacyId     Int?
+
+  patrimony String?
+  assetTag  String?
+  name      String?
+
+  categoryId String
+  category   InventoryCategory        @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  status     InventoryEquipmentStatus @default(ACTIVE)
+
+  currentHolderId String?
+  currentHolder   InventoryPerson?     @relation(fields: [currentHolderId], references: [id], onDelete: Restrict)
+  departmentId    String?
+  department      InventoryDepartment? @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  locationId      String?
+  location        InventoryLocation?   @relation(fields: [locationId], references: [id], onDelete: Restrict)
+
+  locationDetail String?
+  serialNumber   String?
+  invoiceNumber  String?
+
+  acquiredAt     DateTime? @db.Date
+  receivedAt     DateTime? @db.Date
+  deliveredAt    DateTime? @db.Date
+  warrantyEndsAt DateTime? @db.Date
+
+  /// Nunca deve conter valores de InventoryFieldType.PASSWORD. O importador
+  /// rejeita/remove esses valores antes de persistir no portal.
+  specs              Json    @default("{}")
+  /// Valores MAC/IP sintaticamente inválidos encontrados no legado ficam
+  /// separados para revisão, sem quebrar a validação dos dados canônicos.
+  legacyInvalidSpecs Json    @default("{}")
+  notes              String?
+
+  revision   Int       @default(1)
+  archivedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  movements InventoryMovement[]
+
+  @@unique([portalId, patrimony])
+  @@unique([portalId, legacySource, legacyId])
+  @@index([portalId, archivedAt, status])
+  @@index([portalId, categoryId, status])
+  @@index([portalId, currentHolderId])
+  @@index([portalId, departmentId])
+  @@index([portalId, locationId])
+  @@index([portalId, assetTag])
+  @@index([portalId, serialNumber])
+  @@map("inventory_equipment")
+}
+
+/// Evento append-only. Posse/setor atual em InventoryEquipment são a fonte
+/// canônica; o legado não possui um evento inicial para todos os ativos.
+model InventoryMovement {
+  id       String       @id @default(cuid())
+  portalId String
+  portal   BitrixPortal @relation(fields: [portalId], references: [id], onDelete: Restrict)
+
+  legacySource String?
+  legacyId     Int?
+
+  equipmentId String
+  equipment   InventoryEquipment @relation(fields: [equipmentId], references: [id], onDelete: Restrict)
+
+  fromPersonId   String?
+  fromPerson     InventoryPerson? @relation("InventoryMovementFromPerson", fields: [fromPersonId], references: [id], onDelete: Restrict)
+  toPersonId     String?
+  toPerson       InventoryPerson? @relation("InventoryMovementToPerson", fields: [toPersonId], references: [id], onDelete: Restrict)
+  fromPersonName String?
+  toPersonName   String?
+
+  fromDepartmentId   String?
+  fromDepartment     InventoryDepartment? @relation("InventoryMovementFromDepartment", fields: [fromDepartmentId], references: [id], onDelete: Restrict)
+  toDepartmentId     String?
+  toDepartment       InventoryDepartment? @relation("InventoryMovementToDepartment", fields: [toDepartmentId], references: [id], onDelete: Restrict)
+  fromDepartmentName String?
+  toDepartmentName   String?
+
+  movedAt DateTime                @db.Date
+  reason  String?
+  origin  InventoryMovementOrigin @default(MANUAL)
+
+  performedByBitrixUserId String?
+  performedByName         String?
+  createdAt               DateTime @default(now())
+
+  @@unique([portalId, legacySource, legacyId])
+  @@index([portalId, equipmentId, movedAt])
+  @@index([portalId, fromPersonId, movedAt])
+  @@index([portalId, toPersonId, movedAt])
+  @@index([portalId, createdAt])
+  @@map("inventory_movements")
+}
+
+model InventoryExtension {
+  id       String       @id @default(cuid())
+  portalId String
+  portal   BitrixPortal @relation(fields: [portalId], references: [id], onDelete: Restrict)
+
+  legacySource String?
+  legacyId     Int?
+
+  number       String?
+  collaborator String?
+  department   String?
+  type         String?
+  active       Boolean   @default(true)
+  notes        String?
+  archivedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([portalId, legacySource, legacyId])
+  @@index([portalId, archivedAt, active, number])
+  @@map("inventory_extensions")
+}
+
+model InventoryReceiving {
+  id       String       @id @default(cuid())
+  portalId String
+  portal   BitrixPortal @relation(fields: [portalId], references: [id], onDelete: Restrict)
+
+  legacySource String?
+  legacyId     Int?
+
+  receivedAt  DateTime? @db.Date
+  equipment   String?
+  quantity    Int       @default(1)
+  tag         String?
+  deliveredAt DateTime? @db.Date
+  deliveredTo String?
+  notes       String?
+  archivedAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([portalId, legacySource, legacyId])
+  @@index([portalId, archivedAt, receivedAt])
+  @@map("inventory_receivings")
+}
+
+model InventoryCustomModule {
+  id       String       @id @default(cuid())
+  portalId String
+  portal   BitrixPortal @relation(fields: [portalId], references: [id], onDelete: Restrict)
+
+  legacySource String?
+  legacyId     Int?
+
+  name        String
+  icon        String  @default("clipboard")
+  description String?
+  titleLabel  String  @default("Nome")
+  sortOrder   Int     @default(100)
+  active      Boolean @default(true)
+  revision    Int     @default(1)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  fields  InventoryCustomModuleField[]
+  records InventoryCustomRecord[]
+
+  @@unique([portalId, name])
+  @@unique([portalId, legacySource, legacyId])
+  @@index([portalId, active, sortOrder])
+  @@map("inventory_custom_modules")
+}
+
+model InventoryCustomModuleField {
+  id       String       @id @default(cuid())
+  portalId String
+  portal   BitrixPortal @relation(fields: [portalId], references: [id], onDelete: Restrict)
+
+  moduleId String
+  module   InventoryCustomModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  legacySource String?
+  legacyId     Int?
+
+  key         String
+  label       String
+  type        InventoryFieldType @default(TEXT)
+  options     String[]
+  sortOrder   Int                @default(100)
+  required    Boolean            @default(false)
+  listVisible Boolean            @default(false)
+  expiryAlert Boolean            @default(false)
+  active      Boolean            @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([moduleId, key])
+  @@unique([portalId, legacySource, legacyId])
+  @@index([portalId, moduleId, active, sortOrder])
+  @@map("inventory_custom_module_fields")
+}
+
+model InventoryCustomRecord {
+  id       String       @id @default(cuid())
+  portalId String
+  portal   BitrixPortal @relation(fields: [portalId], references: [id], onDelete: Restrict)
+
+  moduleId String
+  module   InventoryCustomModule @relation(fields: [moduleId], references: [id], onDelete: Restrict)
+
+  legacySource String?
+  legacyId     Int?
+
+  title      String?
+  data       Json      @default("{}")
+  revision   Int       @default(1)
+  archivedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([portalId, legacySource, legacyId])
+  @@index([portalId, moduleId, archivedAt])
+  @@map("inventory_custom_records")
+}
+
+model InventoryTerm {
+  id       String       @id @default(cuid())
+  portalId String
+  portal   BitrixPortal @relation(fields: [portalId], references: [id], onDelete: Restrict)
+
+  legacySource String?
+  legacyId     Int?
+
+  type InventoryTermType @default(RESPONSIBILITY)
+
+  personId             String?
+  person               InventoryPerson? @relation("InventoryTermOriginPerson", fields: [personId], references: [id], onDelete: Restrict)
+  personName           String?
+  personDepartmentName String?
+
+  destinationPersonId       String?
+  destinationPerson         InventoryPerson? @relation("InventoryTermDestinationPerson", fields: [destinationPersonId], references: [id], onDelete: Restrict)
+  destinationPersonName     String?
+  destinationDepartmentName String?
+
+  items        Json    @default("[]")
+  observations String?
+
+  createdByBitrixUserId String?
+  createdByName         String?
+  createdAt             DateTime  @default(now())
+  archivedAt            DateTime?
+
+  @@unique([portalId, legacySource, legacyId])
+  @@index([portalId, archivedAt, createdAt])
+  @@index([portalId, personId, createdAt])
+  @@map("inventory_terms")
+}
+
+/// Metadados de arquivos no Vercel Blob. O alvo polimórfico é validado na
+/// camada de serviço antes de criar/listar/remover a linha.
+model InventoryAttachment {
+  id       String       @id @default(cuid())
+  portalId String
+  portal   BitrixPortal @relation(fields: [portalId], references: [id], onDelete: Restrict)
+
+  legacySource String?
+  legacyId     Int?
+
+  entityType InventoryAttachmentEntityType
+  entityId   String
+
+  blobUrl      String
+  blobPathname String
+  originalName String
+  contentType  String?
+  size         Int
+  description  String?
+
+  uploadedByBitrixUserId String?
+  uploadedByName         String?
+  createdAt              DateTime @default(now())
+
+  @@unique([portalId, legacySource, legacyId])
+  @@index([portalId, entityType, entityId, createdAt])
+  @@map("inventory_attachments")
+}
+
+/// Outbox idempotente para que falhas do provedor de blobs nunca deixem uma
+/// linha ativa apontando para um arquivo já removido nem sejam silenciosamente
+/// esquecidas como blobs órfãos.
+model InventoryBlobCleanup {
+  id       String       @id @default(cuid())
+  portalId String
+  portal   BitrixPortal @relation(fields: [portalId], references: [id], onDelete: Restrict)
+
+  blobUrl     String    @unique
+  reason      String
+  attempts    Int       @default(0)
+  lastError   String?
+  completedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([portalId, completedAt, createdAt])
+  @@map("inventory_blob_cleanups")
+}
+
+model InventoryImportRun {
+  id       String       @id @default(cuid())
+  portalId String
+  portal   BitrixPortal @relation(fields: [portalId], references: [id], onDelete: Restrict)
+
+  source          String
+  formatVersion   Int
+  rawSha256       String
+  canonicalSha256 String?
+  status          InventoryImportStatus @default(RUNNING)
+
+  expectedCounts Json    @default("{}")
+  report         Json    @default("{}")
+  errorMessage   String?
+  executedBy     String?
+
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@unique([portalId, source, rawSha256])
+  @@index([portalId, status, startedAt])
+  @@map("inventory_import_runs")
+}
