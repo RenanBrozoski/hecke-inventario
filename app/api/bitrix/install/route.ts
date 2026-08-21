@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { BitrixApiError, fetchCurrentUserWithContextToken } from '@/src/modules/bitrix/client'
+import { fetchCurrentUserWithContextToken } from '@/src/modules/bitrix/client'
 import { activatePortal, upsertPortalOnInstall } from '@/src/modules/bitrix/portal-credentials'
 import { invalidateHandshakesForPortal } from '@/src/modules/auth/handshake'
 import { maskSecret } from '@/src/modules/bitrix/crypto'
@@ -129,12 +129,14 @@ export async function POST(request: Request): Promise<NextResponse> {
     // expired_token, invalid_token). Sem isso, todo problema de credencial
     // vira a mesma frase e o diagnóstico fica no escuro. É código/descrição
     // de erro — nunca o token.
-    const motivo =
-      error instanceof BitrixApiError
-        ? `${error.code}: ${error.message}`
-        : error instanceof Error
-          ? error.message
-          : String(error)
+    // Lido por duck typing de propósito: `instanceof BitrixApiError` obrigaria
+    // todo teste que faz vi.mock do client a reexportar a classe.
+    const code =
+      typeof error === 'object' && error !== null && 'code' in error
+        ? String((error as { code?: unknown }).code ?? '')
+        : ''
+    const detalhe = error instanceof Error ? error.message : String(error)
+    const motivo = code ? `${code}: ${detalhe}` : detalhe
     return htmlResponse(
       installErrorHtml(
         `Não foi possível validar as credenciais recebidas do Bitrix24. ` +
