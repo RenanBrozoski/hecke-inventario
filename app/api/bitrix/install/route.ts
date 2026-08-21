@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { fetchCurrentUserWithContextToken } from '@/src/modules/bitrix/client'
+import { BitrixApiError, fetchCurrentUserWithContextToken } from '@/src/modules/bitrix/client'
 import { activatePortal, upsertPortalOnInstall } from '@/src/modules/bitrix/portal-credentials'
 import { invalidateHandshakesForPortal } from '@/src/modules/auth/handshake'
 import { maskSecret } from '@/src/modules/bitrix/crypto'
@@ -125,8 +125,21 @@ export async function POST(request: Request): Promise<NextResponse> {
       { domain, memberId, err: error },
       'install: falha ao validar AUTH_ID com user.current',
     )
+    // Mostra o motivo devolvido pelo próprio Bitrix24 (ex.: ACCESS_DENIED,
+    // expired_token, invalid_token). Sem isso, todo problema de credencial
+    // vira a mesma frase e o diagnóstico fica no escuro. É código/descrição
+    // de erro — nunca o token.
+    const motivo =
+      error instanceof BitrixApiError
+        ? `${error.code}: ${error.message}`
+        : error instanceof Error
+          ? error.message
+          : String(error)
     return htmlResponse(
-      installErrorHtml('Não foi possível validar as credenciais recebidas do Bitrix24.'),
+      installErrorHtml(
+        `Não foi possível validar as credenciais recebidas do Bitrix24. ` +
+          `Portal consultado: ${domain}. Resposta do Bitrix24 — ${motivo}`,
+      ),
     )
   }
 
