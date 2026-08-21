@@ -18,15 +18,13 @@ export function SessionGate({ children, requireAdmin }: SessionGateProps) {
   const { state } = useSession()
 
   if (state.status === 'loading') {
-    return (
-      <main style={{ padding: '2rem', color: 'var(--color-text-muted)' }}>Carregando…</main>
-    )
+    return <main style={{ padding: '2rem', color: 'var(--color-text-muted)' }}>Carregando…</main>
   }
 
   if (state.status === 'no-handshake') {
     return (
       <main style={{ padding: '2rem', maxWidth: 480 }}>
-        <h1>Portal de Solicitações</h1>
+        <h1>Inventário de TI</h1>
         <p>Este aplicativo precisa ser aberto de dentro do Bitrix24.</p>
       </main>
     )
@@ -35,7 +33,7 @@ export function SessionGate({ children, requireAdmin }: SessionGateProps) {
   if (state.status === 'error') {
     return (
       <main style={{ padding: '2rem', maxWidth: 480 }}>
-        <h1>Portal de Solicitações</h1>
+        <h1>Inventário de TI</h1>
         <p className="alert alert-error">{state.message}</p>
         <button type="button" className="primary" onClick={() => window.location.reload()}>
           Tentar novamente

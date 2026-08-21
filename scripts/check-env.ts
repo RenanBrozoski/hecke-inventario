@@ -25,7 +25,7 @@ function printSection(title: string, checks: DiagnosticCheck[]) {
 }
 
 async function main() {
-  console.log('Diagnóstico do ambiente — Portal de Solicitações')
+  console.log('Diagnóstico do ambiente — Inventário de TI')
 
   const envChecks = runEnvChecks()
   printSection('Configuração (variáveis de ambiente)', envChecks)

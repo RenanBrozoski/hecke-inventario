@@ -35,7 +35,7 @@ function htmlResponse(html: string, status = 200): NextResponse {
 function installSuccessHtml(): string {
   return `<!doctype html>
 <html lang="pt-BR">
-<head><meta charset="utf-8" /><title>Instalando Portal de Solicitações</title></head>
+<head><meta charset="utf-8" /><title>Instalando Inventário de TI</title></head>
 <body>
 <p>Instalação concluída — você já pode fechar esta janela.</p>
 <script src="https://api.bitrix24.com/api/v1/"></script>
@@ -205,5 +205,8 @@ export async function POST(request: Request): Promise<NextResponse> {
       )
     })
 
+  // NÃO trocar por redirect: esta página chama BX24.installFinish(), que é o
+  // que sinaliza ao Bitrix24 que a instalação terminou. Sem essa chamada o
+  // portal fica com o app em estado "instalando" para sempre.
   return htmlResponse(installSuccessHtml())
 }

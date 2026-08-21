@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Portal de Solicitações',
+  title: 'Inventário de TI',
   description: 'Plataforma interna de formulários e fluxos de aprovação integrada ao Bitrix24',
 }
 
