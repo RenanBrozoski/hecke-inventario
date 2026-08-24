@@ -7,4 +7,6 @@ Atualizado em 2026-08-24.
 - A estrutura de colaboração foi criada agora, pois não existia.
 - Última alteração publicada: `86ad5bf fix: concluir exclusão sem tabelas auxiliares`.
 - Validação da última entrega: typecheck, lint e 160 testes passaram; exclusão real do equipamento de teste GLPI PC026 foi concluída.
-- Não há arquivos do código em edição neste momento.
+- Trabalho ativo: correção do sincronizador GLPI em `scripts/sync-glpi.ps1` e
+  `src/modules/inventory/glpi-sync.ts`. Escopo: módulos de RAM, placas de rede,
+  componentes e preservação da TAG patrimonial manual.

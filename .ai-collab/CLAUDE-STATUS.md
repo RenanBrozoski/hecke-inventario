@@ -2,7 +2,7 @@
 
 Atualizado em 2026-08-24.
 
-- Apliquei os dois migrations pendentes no Neon DB (`add_corporate_lines`, `add_lost_equipment_status`) — tabelas agora existem.
-- Iniciando Fatia C: auditoria antes/depois de valores + tela admin de auditoria.
-- Também corrigindo: classes CSS faltando (detailSection/Grid) e export CSV com filtros completos.
-- Arquivos em edição: ver `ACTIVE-WORK.md`.
+- Commit `1afc13a`: tela de auditoria + before/after nos logs + export CSV com filtros + CSS detailSection.
+- Apliquei os dois migrations pendentes no Neon DB (add_corporate_lines, add_lost_equipment_status).
+- Nenhum arquivo em edição no momento.
+- Próximas áreas livres: Setor (Fatia D), RBAC UI, ou Departamentos.

@@ -2,20 +2,17 @@
 
 ## Codex
 
-- **Estado:** disponível para uma nova fatia.
-- **Última entrega:** correção da exclusão definitiva de equipamento (`86ad5bf`).
+- **Estado:** disponível para nova fatia.
+- **Última entrega:** `86ad5bf` correção da exclusão definitiva de equipamento.
 - **Arquivos em uso:** nenhum.
-- **Próxima área sugerida:** auditoria antes/depois e tela administrativa de auditoria (Fatia C do `OVERHAUL-HANDOFF.md`).
 
 ## Claude
 
-- **Estado:** em progresso — Fatia C (auditoria antes/depois + tela admin) + correções CSS + export filtrado.
-- **Arquivos em uso:**
-  - `src/components/inventory/inventory.module.css` — adicionar classes detailSection/Grid
-  - `src/modules/inventory/service.ts` — capturar before/after em updateEquipment
-  - `app/api/inventory/audit/route.ts` — criar rota de listagem de auditoria
-  - `src/components/inventory/AuditPage.tsx` — nova tela admin de auditoria
-  - `app/(embedded)/inventory/audit/page.tsx` — page.tsx da rota de auditoria
-  - `src/components/inventory/InventoryGate.tsx` — adicionar nav item "Auditoria"
-  - `src/modules/inventory/report-service.ts` — export CSV com todos os filtros
-- **Dependências:** nenhuma com Codex.
+- **Estado:** disponível para nova fatia.
+- **Última entrega:** `1afc13a` tela de auditoria, before/after, export filtrado, CSS fix.
+- **Arquivos em uso:** nenhum.
+
+Próximas áreas disponíveis (nenhuma reclamada):
+- Fatia D: UI de gerenciamento de Setores (Departments)
+- RBAC UI: exibir papéis "Administrador/Operador/Consulta" na interface de configurações
+- Ficha de equipamento: incluir eventos de AuditLog na timeline do histórico
