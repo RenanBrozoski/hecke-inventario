@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { EQUIPMENT_STATUS_LABELS, equipmentLabel, formatDate, statusTone } from './format'
+import { EQUIPMENT_STATUS_LABELS, equipmentLabel, formatDate, readApiError, statusTone } from './format'
 
 describe('inventory format helpers', () => {
   it('formata data civil sem deslocamento de fuso', () => {
@@ -20,5 +20,20 @@ describe('inventory format helpers', () => {
     expect(statusTone('BROKEN')).toBe('danger')
     expect(statusTone('LOST')).toBe('danger')
     expect(statusTone('STOCK')).toBe('neutral')
+  })
+
+  it('substitui erro interno por uma ação contextual, mas mantém regras de negócio', async () => {
+    await expect(
+      readApiError(
+        Response.json({ error: 'Erro interno.' }, { status: 500 }),
+        'Não foi possível excluir o equipamento.',
+      ),
+    ).resolves.toBe('Não foi possível excluir o equipamento.')
+    await expect(
+      readApiError(
+        Response.json({ error: 'Mova os equipamentos antes de desativar este local.' }, { status: 409 }),
+        'Falha.',
+      ),
+    ).resolves.toBe('Mova os equipamentos antes de desativar este local.')
   })
 })

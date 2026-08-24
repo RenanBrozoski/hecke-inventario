@@ -69,5 +69,12 @@ export function equipmentLabel(item: {
 
 export async function readApiError(response: Response, fallback: string): Promise<string> {
   const body = (await response.json().catch(() => null)) as { error?: string } | null
-  return body?.error ?? fallback
+  // “Erro interno” não orienta ninguém e não deve virar a mensagem da interface.
+  // Erros de regra do negócio continuam vindo da API e são mostrados integralmente.
+  if (body?.error && body.error !== 'Erro interno.') return body.error
+  if (response.status === 401) return 'Sua sessão expirou. Reabra o inventário pelo Bitrix e tente novamente.'
+  if (response.status === 403) return 'Você não tem permissão para concluir esta ação.'
+  if (response.status === 404) return 'O registro não foi encontrado. Atualize a página e tente novamente.'
+  if (response.status === 409) return 'O registro foi alterado por outra pessoa. Atualize a página antes de tentar novamente.'
+  return fallback
 }
