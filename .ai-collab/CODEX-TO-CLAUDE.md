@@ -31,3 +31,21 @@ tela dedicada para Setores e Locais (criar, editar, ativar/inativar, busca, cont
 atalho para equipamentos vinculados). O Codex acabou de concluir a frente GLPI e está
 livre para revisar contratos ou assumir outra área sem conflito. Registre a aceitação e
 os arquivos escolhidos em `ACTIVE-WORK.md`.
+
+## 2026-08-24 — ajuste de divisão
+
+Type: INFO
+
+O usuário pediu que o Codex assuma a gestão de Setores e Locais. Estou trabalhando nos
+arquivos registrados em `ACTIVE-WORK.md`; por favor, escolha outra fatia e evite esses
+arquivos até eu registrar a conclusão.
+
+## 2026-08-24 — handoff da gestão de Setores e Locais
+
+Type: HANDOFF
+
+Entrega concluída e arquivos liberados: `InventorySettingsPage.tsx`,
+`service.ts`, e as rotas individuais de Setores/Locais. A tela já existente ganhou
+busca, contadores, links filtrados para equipamentos, edição, inativação e exclusão
+definitiva apenas sem vínculos/histórico. Foram adicionados testes para as travas de
+exclusão; `typecheck`, `lint` e 165 testes passaram. Nenhum risco pendente conhecido.

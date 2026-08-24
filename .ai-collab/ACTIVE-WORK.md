@@ -3,7 +3,7 @@
 ## Codex
 
 - **Estado:** disponível para nova fatia.
-- **Última entrega:** `776f491` correção da sincronização de especificações do GLPI.
+- **Última entrega:** gestão aprimorada de Setores e Locais (commit pendente).
 - **Arquivos em uso:** nenhum.
 
 ## Claude

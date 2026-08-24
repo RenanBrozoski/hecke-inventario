@@ -13,4 +13,9 @@ Atualizado em 2026-08-24.
   do GLPI é guardado somente em `specs.glpi.otherSerial`.
 - O GLPI atual não informou OS, CPU, GPU, IP ou antivírus; quando esses dados forem
   retornados, o conector os persiste sem apagar dados preenchidos manualmente.
+- Entrega concluída: gestão de Setores e Locais evoluída na tela existente de
+  Configurações. Inclui busca, contagem de vínculos, atalho para equipamentos filtrados,
+  edição, inativação e exclusão definitiva limitada a cadastros sem dependências.
+- Validações executadas: `npm run typecheck`, `npm run lint` e `npm test`
+  (41 arquivos / 165 testes).
 - Não há arquivos do código em edição neste momento.

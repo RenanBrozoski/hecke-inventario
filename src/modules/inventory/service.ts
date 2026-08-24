@@ -1486,6 +1486,42 @@ export async function updateDepartment(
   }
 }
 
+/** Remove apenas um cadastro sem vínculos. Registros usados em pessoas,
+ * equipamentos ou movimentações precisam ser mantidos/inativados para não
+ * apagar o histórico do inventário. */
+export async function permanentlyDeleteDepartment(context: InventoryContext, departmentId: string) {
+  return prisma.$transaction(async (tx) => {
+    await lockInventoryResource(tx, context.portalId, 'department', departmentId)
+    const record = await tx.inventoryDepartment.findFirst({
+      where: { id: departmentId, portalId: context.portalId },
+      include: {
+        _count: {
+          select: { people: true, equipment: true, movementsFrom: true, movementsTo: true },
+        },
+      },
+    })
+    if (!record) throw new InventoryNotFoundError('Setor não encontrado.')
+    const links = record._count.people + record._count.equipment + record._count.movementsFrom + record._count.movementsTo
+    if (links > 0) {
+      throw new InventoryConflictError(
+        'Este setor possui vínculos ou histórico. Mova os registros e use a inativação para preservá-los.',
+      )
+    }
+    await tx.inventoryDepartment.delete({ where: { id: departmentId } })
+    await recordAuditEvent(
+      {
+        portalId: context.portalId,
+        bitrixUserId: context.bitrixUserId,
+        action: 'inventory_department_deleted',
+        entityType: 'InventoryDepartment',
+        entityId: departmentId,
+      },
+      tx,
+    )
+    return { id: departmentId, deleted: true }
+  })
+}
+
 export async function listLocations(portalId: string) {
   return prisma.inventoryLocation.findMany({
     where: { portalId },
@@ -1570,6 +1606,34 @@ export async function updateLocation(
       throw new InventoryConflictError('Já existe um local com este nome.')
     throw error
   }
+}
+
+export async function permanentlyDeleteLocation(context: InventoryContext, locationId: string) {
+  return prisma.$transaction(async (tx) => {
+    await lockInventoryResource(tx, context.portalId, 'location', locationId)
+    const record = await tx.inventoryLocation.findFirst({
+      where: { id: locationId, portalId: context.portalId },
+      include: { _count: { select: { equipment: true } } },
+    })
+    if (!record) throw new InventoryNotFoundError('Local não encontrado.')
+    if (record._count.equipment > 0) {
+      throw new InventoryConflictError(
+        'Este local possui equipamentos vinculados. Mova-os e use a inativação para preservar o histórico.',
+      )
+    }
+    await tx.inventoryLocation.delete({ where: { id: locationId } })
+    await recordAuditEvent(
+      {
+        portalId: context.portalId,
+        bitrixUserId: context.bitrixUserId,
+        action: 'inventory_location_deleted',
+        entityType: 'InventoryLocation',
+        entityId: locationId,
+      },
+      tx,
+    )
+    return { id: locationId, deleted: true }
+  })
 }
 
 export async function listCategories(portalId: string) {

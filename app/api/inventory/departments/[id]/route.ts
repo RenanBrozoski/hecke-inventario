@@ -6,7 +6,7 @@ import {
   requireInventoryRole,
 } from '@/src/modules/inventory/http'
 import { updateNamedResourceSchema } from '@/src/modules/inventory/schemas'
-import { getDepartment, updateDepartment } from '@/src/modules/inventory/service'
+import { getDepartment, permanentlyDeleteDepartment, updateDepartment } from '@/src/modules/inventory/service'
 
 export const dynamic = 'force-dynamic'
 
@@ -41,5 +41,16 @@ async function setActive(
 
 export const PATCH = (request: Request, route: { params: Promise<{ id: string }> }) =>
   setActive(request, route)
-export const DELETE = (request: Request, route: { params: Promise<{ id: string }> }) =>
-  setActive(request, route, false)
+export async function DELETE(request: Request, route: { params: Promise<{ id: string }> }) {
+  try {
+    const context = await requireInventoryContext(request)
+    requireInventoryRole(context, 'ADMIN')
+    const { id } = await route.params
+    if (new URL(request.url).searchParams.get('permanent') !== 'true') {
+      return jsonOk(await updateDepartment(context, id, { active: false }))
+    }
+    return jsonOk(await permanentlyDeleteDepartment(context, id))
+  } catch (error) {
+    return inventoryErrorResponse(error)
+  }
+}

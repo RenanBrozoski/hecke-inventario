@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useSession } from '@/src/components/session/SessionProvider'
 import { FIELD_TYPE_LABELS, readApiError } from './format'
 import { InventoryGate } from './InventoryGate'
@@ -457,8 +457,23 @@ function NamedSettings({
   const [description, setDescription] = useState('')
   const [editing, setEditing] = useState<ManagedLookup | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
+  const [saving, setSaving] = useState(false)
+  const filteredItems = useMemo(() => {
+    const normalized = query.trim().toLocaleLowerCase('pt-BR')
+    if (!normalized) return items
+    return items.filter((item) =>
+      `${item.name} ${item.description ?? ''}`.toLocaleLowerCase('pt-BR').includes(normalized),
+    )
+  }, [items, query])
+  const isDepartment = endpoint === 'departments'
+  const linkedCount = (item: ManagedLookup) =>
+    (item._count?.equipment ?? 0) + (isDepartment ? (item._count?.people ?? 0) : 0)
+  const equipmentHref = (item: ManagedLookup) =>
+    `/inventory/equipment?${isDepartment ? 'departmentId' : 'locationId'}=${encodeURIComponent(item.id)}`
   async function create(event: FormEvent) {
     event.preventDefault()
+    setSaving(true)
     setError(null)
     try {
       const response = await authorizedFetch(`/api/inventory/${endpoint}`, {
@@ -473,11 +488,14 @@ function NamedSettings({
       await reload()
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Falha ao criar o registro.')
+    } finally {
+      setSaving(false)
     }
   }
   async function saveEdit(event: FormEvent) {
     event.preventDefault()
     if (!editing) return
+    setSaving(true)
     setError(null)
     try {
       const response = await authorizedFetch(`/api/inventory/${endpoint}/${editing.id}`, {
@@ -486,11 +504,16 @@ function NamedSettings({
       })
       if (!response.ok) throw new Error(await readApiError(response, 'Não foi possível atualizar o registro.'))
       setEditing(null); setName(''); setDescription(''); await reload()
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Falha ao atualizar o registro.') }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Falha ao atualizar o registro.')
+    } finally {
+      setSaving(false)
+    }
   }
   async function toggleActive(item: ManagedLookup) {
     const action = item.active ? 'desativar' : 'ativar'
     if (!window.confirm(`${action[0]!.toUpperCase()}${action.slice(1)} “${item.name}”?`)) return
+    setSaving(true)
     setError(null)
     try {
       const response = await authorizedFetch(`/api/inventory/${endpoint}/${item.id}`, {
@@ -498,11 +521,45 @@ function NamedSettings({
       })
       if (!response.ok) throw new Error(await readApiError(response, `Não foi possível ${action} o registro.`))
       await reload()
-    } catch (cause) { setError(cause instanceof Error ? cause.message : `Falha ao ${action} o registro.`) }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : `Falha ao ${action} o registro.`)
+    } finally {
+      setSaving(false)
+    }
+  }
+  async function permanentlyDelete(item: ManagedLookup) {
+    if (linkedCount(item) > 0) {
+      setError('Este cadastro possui vínculos. Mova os registros e use a inativação para preservar o histórico.')
+      return
+    }
+    if (!window.confirm(`Excluir definitivamente “${item.name}”? Esta ação não pode ser desfeita.`)) return
+    setSaving(true)
+    setError(null)
+    try {
+      const response = await authorizedFetch(`/api/inventory/${endpoint}/${item.id}?permanent=true`, {
+        method: 'DELETE',
+      })
+      if (!response.ok) throw new Error(await readApiError(response, 'Não foi possível excluir o registro.'))
+      if (editing?.id === item.id) {
+        setEditing(null)
+        setName('')
+        setDescription('')
+      }
+      await reload()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Falha ao excluir o registro.')
+    } finally {
+      setSaving(false)
+    }
   }
   return (
     <section className={styles.card}>
       <h2>{title}</h2>
+      <p className={styles.notice}>
+        {isDepartment
+          ? 'Setores organizam pessoas e equipamentos. Cadastros com histórico devem ser inativados.'
+          : 'Locais/filiais organizam os equipamentos. Cadastros com vínculos devem ser inativados.'}
+      </p>
       {error && <p className="alert alert-error">{error}</p>}
       <form className={styles.formGrid} onSubmit={editing ? saveEdit : create}>
         <Field label="Nome">
@@ -511,33 +568,56 @@ function NamedSettings({
         <Field label="Descrição">
           <input value={description} onChange={(event) => setDescription(event.target.value)} />
         </Field>
-        <button type="submit" className="primary">
+        <button type="submit" className="primary" disabled={saving}>
           {editing ? 'Salvar alterações' : 'Adicionar'}
         </button>
-        {editing && <button type="button" onClick={() => { setEditing(null); setName(''); setDescription('') }}>Cancelar</button>}
+        {editing && <button type="button" disabled={saving} onClick={() => { setEditing(null); setName(''); setDescription('') }}>Cancelar</button>}
       </form>
+      <div className={`${styles.filters} ${styles.sectionTitle}`}>
+        <div className={styles.field}>
+          <label htmlFor={`${endpoint}-search`}>Buscar</label>
+          <input
+            id={`${endpoint}-search`}
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={`Buscar ${title.toLocaleLowerCase('pt-BR')}…`}
+          />
+        </div>
+        <p className={styles.notice}>
+          {filteredItems.length} de {items.length} cadastro(s)
+        </p>
+      </div>
       <div className={`${styles.tableWrap} ${styles.sectionTitle}`}>
         <table>
           <thead>
             <tr>
               <th>Nome</th>
               <th>Descrição</th>
+              <th>Vínculos</th>
               <th>Situação</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
-            {items.map((item) => (
+            {filteredItems.map((item) => (
               <tr key={item.id}>
                 <td>{item.name}</td>
                 <td>{item.description || '—'}</td>
-                <td>{item.active ? 'Ativo' : 'Inativo'}</td>
+                <td>
+                  <a href={equipmentHref(item)}>
+                    {item._count?.equipment ?? 0} equipamento(s)
+                  </a>
+                  {isDepartment && <><br />{item._count?.people ?? 0} pessoa(s)</>}
+                </td>
+                <td><span className={item.active ? 'badge badge-success' : 'badge'}>{item.active ? 'Ativo' : 'Inativo'}</span></td>
                 <td className={styles.rowActions}>
-                  <button type="button" onClick={() => { setEditing(item); setName(item.name); setDescription(item.description ?? '') }}>Editar</button>
-                  <button type="button" onClick={() => void toggleActive(item)}>{item.active ? 'Desativar' : 'Ativar'}</button>
+                  <button type="button" disabled={saving} onClick={() => { setEditing(item); setName(item.name); setDescription(item.description ?? '') }}>Editar</button>
+                  <button type="button" disabled={saving} onClick={() => void toggleActive(item)}>{item.active ? 'Inativar' : 'Ativar'}</button>
+                  <button type="button" className="danger" disabled={saving || linkedCount(item) > 0} onClick={() => void permanentlyDelete(item)} title={linkedCount(item) > 0 ? 'Mova os vínculos antes de excluir definitivamente.' : 'Excluir definitivamente'}>Excluir</button>
                 </td>
               </tr>
             ))}
+            {filteredItems.length === 0 && <tr><td colSpan={5} className={styles.muted}>Nenhum cadastro encontrado.</td></tr>}
           </tbody>
         </table>
       </div>
