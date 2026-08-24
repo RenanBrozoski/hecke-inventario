@@ -35,36 +35,16 @@ export async function POST(request: Request): Promise<NextResponse> {
   const rawBody = await request.json().catch(() => null)
   const parsed = bodySchema.safeParse(rawBody)
   if (!parsed.success) {
-    return NextResponse.json({ error: 'Código inválido.' }, { status: 400, headers: SECURITY_HEADERS })
+    return NextResponse.json(
+      { error: 'Código inválido.' },
+      { status: 400, headers: SECURITY_HEADERS },
+    )
   }
 
   // Consumo atômico (ver handshake.ts) — impede que duas trocas simultâneas do
   // mesmo código emitam duas sessões.
   const consumed = await consumeHandshake(parsed.data.code)
   if (!consumed) {
-    // DIAGNÓSTICO TEMPORÁRIO (remover depois): distingue hash/DB errados de
-    // handshake expirado/já consumido. Só metadados — nunca o código.
-    if (request.headers.get('x-debug-exchange') === '1') {
-      const { createHash } = await import('crypto')
-      const codeHash = createHash('sha256').update(parsed.data.code).digest('hex')
-      const row = await prisma.bitrixHandshake.findUnique({
-        where: { codeHash },
-        select: { consumedAt: true, expiresAt: true, portalId: true },
-      })
-      const total = await prisma.bitrixHandshake.count()
-      return NextResponse.json(
-        {
-          debug: true,
-          hashPrefix: codeHash.slice(0, 12),
-          rowFound: Boolean(row),
-          consumedAt: row?.consumedAt ?? null,
-          expiresAt: row?.expiresAt ?? null,
-          now: new Date().toISOString(),
-          totalHandshakes: total,
-        },
-        { status: 200, headers: SECURITY_HEADERS },
-      )
-    }
     return genericInvalidResponse()
   }
 
