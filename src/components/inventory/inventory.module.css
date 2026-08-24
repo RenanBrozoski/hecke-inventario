@@ -15,11 +15,127 @@
   --color-warning: #f0c969;
   --color-warning-bg: #42381e;
   color-scheme: dark;
-  min-height: calc(100vh - 3rem);
+  display: grid;
+  grid-template-columns: 230px minmax(0, 1fr);
+  min-height: min(840px, calc(100vh - 3rem));
   min-width: 0;
-  padding: 1.25rem;
   border-radius: var(--radius-lg);
   background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  overflow: hidden;
+}
+
+.inventorySidebar {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  padding: 1rem 0.7rem 0.8rem;
+  background: #10151d;
+  border-right: 1px solid var(--color-border);
+}
+
+.inventoryBrand {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.35rem 0.45rem 1.2rem;
+}
+
+.inventoryBrand strong,
+.inventoryBrand small {
+  display: block;
+}
+
+.inventoryBrand strong {
+  color: #fff;
+  font-size: 0.98rem;
+  letter-spacing: -0.01em;
+}
+
+.inventoryBrand small,
+.sidebarFooter small {
+  color: #8492a5;
+  font-size: 0.7rem;
+  margin-top: 0.1rem;
+}
+
+.brandMark {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 9px;
+  background: linear-gradient(135deg, #6392ff, #4569cb);
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.sidebarNav {
+  display: grid;
+  gap: 1.05rem;
+}
+
+.sidebarSection > span {
+  display: block;
+  padding: 0 0.5rem 0.35rem;
+  color: #708097;
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.075em;
+  text-transform: uppercase;
+}
+
+.sidebarSection a {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin: 0.1rem 0;
+  padding: 0.55rem 0.55rem;
+  border-radius: 7px;
+  color: #b8c4d3;
+  font-size: 0.82rem;
+  text-decoration: none;
+}
+
+.sidebarSection a:hover {
+  background: #1d2634;
+  color: #fff;
+  text-decoration: none;
+}
+
+.sidebarSection i {
+  display: inline-grid;
+  width: 1rem;
+  place-items: center;
+  color: #8296b2;
+  font-size: 0.86rem;
+  font-style: normal;
+}
+
+.sidebarSection a.sidebarActive {
+  background: #294b8b;
+  box-shadow: inset 3px 0 0 #8eb0ff;
+  color: #fff;
+  font-weight: 600;
+}
+
+.sidebarSection a.sidebarActive i {
+  color: #bcd0ff;
+}
+
+.sidebarFooter {
+  display: grid;
+  gap: 0.25rem;
+  margin-top: auto;
+  padding: 1rem 0.45rem 0.2rem;
+  border-top: 1px solid #273142;
+}
+
+.inventoryContent {
+  min-width: 0;
+  padding: 1.35rem;
 }
 
 .moduleBar {
@@ -52,16 +168,19 @@
 }
 
 .moduleNav a:focus-visible,
-.categoryGroup:focus-visible {
+.categoryGroup:focus-visible,
+.sidebarSection a:focus-visible {
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;
 }
 
 .role {
   flex: 0 0 auto;
-  border: 1px solid var(--color-border);
+  width: fit-content;
+  border: 1px solid #3a4b63;
   border-radius: 999px;
-  color: var(--color-text-muted);
+  background: #182231;
+  color: #bfd0e6;
   font-size: 0.72rem;
   padding: 0.25rem 0.6rem;
 }
@@ -568,6 +687,48 @@
 }
 
 @media (max-width: 900px) {
+  .module {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+
+  .inventorySidebar {
+    min-height: 0;
+    padding: 0.8rem;
+    border-right: 0;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .inventoryBrand,
+  .sidebarFooter {
+    display: none;
+  }
+
+  .sidebarNav {
+    display: flex;
+    gap: 0.65rem;
+    overflow-x: auto;
+  }
+
+  .sidebarSection {
+    display: flex;
+    gap: 0.2rem;
+    flex: 0 0 auto;
+  }
+
+  .sidebarSection > span {
+    display: none;
+  }
+
+  .sidebarSection a {
+    margin: 0;
+    white-space: nowrap;
+  }
+
+  .inventoryContent {
+    padding: 1rem;
+  }
+
   .grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -585,7 +746,6 @@
 
 @media (max-width: 620px) {
   .module {
-    padding: 0.8rem;
     border-radius: 0;
   }
 

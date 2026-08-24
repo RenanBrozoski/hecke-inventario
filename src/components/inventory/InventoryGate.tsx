@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { useSession } from '@/src/components/session/SessionProvider'
 import { readApiError } from './format'
@@ -11,21 +12,41 @@ interface InventoryGateProps {
   children: (context: InventoryContextResponse) => ReactNode
 }
 
-const NAV_ITEMS = [
-  { href: '/inventory', label: 'Visão geral' },
-  { href: '/inventory/equipment', label: 'Equipamentos' },
-  { href: '/inventory/people', label: 'Colaboradores' },
-  { href: '/inventory/corporate-lines', label: 'Linhas corporativas' },
-  { href: '/inventory/extensions', label: 'Ramais' },
-  { href: '/inventory/receivings', label: 'Recebimentos' },
-  { href: '/inventory/terms', label: 'Termos' },
-  { href: '/inventory/reports', label: 'Relatórios' },
-  { href: '/inventory/custom', label: 'Personalizados' },
-  { href: '/inventory/imports', label: 'Importar planilha', adminOnly: true },
+interface NavigationItem { href: string; label: string; icon: string; adminOnly?: boolean; exact?: boolean }
+interface NavigationSection { label: string; items: NavigationItem[] }
+
+const NAV_SECTIONS: NavigationSection[] = [
+  {
+    label: 'Visão geral',
+    items: [
+      { href: '/inventory', label: 'Painel', icon: '◈', exact: true },
+      { href: '/inventory/equipment', label: 'Equipamentos', icon: '▣' },
+      { href: '/inventory/people', label: 'Colaboradores', icon: '◎' },
+      { href: '/inventory/corporate-lines', label: 'Linhas corporativas', icon: '⌁' },
+    ],
+  },
+  {
+    label: 'Operações',
+    items: [
+      { href: '/inventory/extensions', label: 'Ramais', icon: '⌕' },
+      { href: '/inventory/receivings', label: 'Recebimentos', icon: '↓' },
+      { href: '/inventory/terms', label: 'Termos', icon: '≡' },
+      { href: '/inventory/reports', label: 'Relatórios', icon: '◫' },
+    ],
+  },
+  {
+    label: 'Administração',
+    items: [
+      { href: '/inventory/custom', label: 'Personalizados', icon: '＋' },
+      { href: '/inventory/imports', label: 'Importar planilha', icon: '⇧', adminOnly: true },
+      { href: '/inventory/settings', label: 'Configurações', icon: '⚙', adminOnly: true },
+    ],
+  },
 ]
 
 export function InventoryGate({ children }: InventoryGateProps) {
   const { authorizedFetch } = useSession()
+  const pathname = usePathname()
   const [context, setContext] = useState<InventoryContextResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -69,24 +90,32 @@ export function InventoryGate({ children }: InventoryGateProps) {
 
   return (
     <div className={styles.module}>
-      <div className={styles.moduleBar}>
-        <nav className={styles.moduleNav} aria-label="Seções do inventário">
-          {NAV_ITEMS.filter((item) => !item.adminOnly || context.canAdmin).map((item) => (
-            <Link key={item.href} href={item.href}>
-              {item.label}
-            </Link>
-          ))}
-          {context.canAdmin && <Link href="/inventory/settings">Configuração</Link>}
+      <aside className={styles.inventorySidebar}>
+        <div className={styles.inventoryBrand}>
+          <span className={styles.brandMark}>IT</span>
+          <div><strong>Inventário</strong><small>Ativos e operações</small></div>
+        </div>
+        <nav className={styles.sidebarNav} aria-label="Seções do inventário">
+          {NAV_SECTIONS.map((section) => {
+            const items = section.items.filter((item) => !item.adminOnly || context.canAdmin)
+            if (!items.length) return null
+            return <section key={section.label} className={styles.sidebarSection}>
+              <span>{section.label}</span>
+              {items.map((item) => {
+                const active = item.exact ? pathname === item.href : pathname === item.href || pathname.startsWith(`${item.href}/`)
+                return <Link key={item.href} href={item.href} className={active ? styles.sidebarActive : ''}>
+                  <i aria-hidden="true">{item.icon}</i>{item.label}
+                </Link>
+              })}
+            </section>
+          })}
         </nav>
-        <span className={styles.role} title="Papel de acesso ao inventário">
-          {context.role === 'ADMIN'
-            ? 'Administrador'
-            : context.role === 'OPERATOR'
-              ? 'Operador'
-              : 'Consulta'}
-        </span>
-      </div>
-      {children(context)}
+        <div className={styles.sidebarFooter}>
+          <span className={styles.role} title="Papel de acesso ao inventário">{context.role === 'ADMIN' ? 'Administrador' : context.role === 'OPERATOR' ? 'Operador' : 'Consulta'}</span>
+          <small>Acesso controlado</small>
+        </div>
+      </aside>
+      <main className={styles.inventoryContent}>{children(context)}</main>
     </div>
   )
 }
