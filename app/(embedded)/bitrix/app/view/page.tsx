@@ -1,8 +1,8 @@
 'use client'
 
 import { SessionGate } from '@/src/components/session/SessionGate'
-import { DashboardContent } from './DashboardContent'
+import { InventoryDashboardPage } from '@/src/components/inventory/InventoryDashboardPage'
 
 export default function BitrixAppPage() {
-  return <SessionGate>{(me) => <DashboardContent me={me} />}</SessionGate>
+  return <SessionGate>{() => <InventoryDashboardPage />}</SessionGate>
 }
