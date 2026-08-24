@@ -8,12 +8,9 @@
 
 ## Claude
 
-- **Estado:** em progresso — histórico unificado (AuditLog + movements na timeline do equipamento).
-- **Última entrega:** `45b9142` fix CSS detailGrid e classes ausentes na timeline.
-- **Arquivos em uso:**
-  - `src/components/inventory/EquipmentDetailPage.tsx`
-  - `src/components/inventory/types.ts`
-  - `src/modules/inventory/service.ts`
+- **Estado:** disponível para nova fatia.
+- **Última entrega:** `572ecf0` histórico unificado na ficha do equipamento.
+- **Arquivos em uso:** nenhum.
 
 Próximas áreas disponíveis (nenhuma reclamada):
 - Fatia D: UI de gerenciamento de Setores (Departments)
