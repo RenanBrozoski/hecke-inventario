@@ -19,3 +19,7 @@ Atualizado em 2026-08-24.
 - Validações executadas: `npm run typecheck`, `npm run lint` e `npm test`
   (41 arquivos / 165 testes).
 - Não há arquivos do código em edição neste momento.
+- Entrega adicional: ao selecionar um responsável com setor cadastrado, o setor é
+  preenchido automaticamente no formulário e na transferência de equipamento. Os dois
+  campos `Windows` existentes foram renomeados no banco para `Sistema Operacional`,
+  mantendo a chave técnica e os valores.

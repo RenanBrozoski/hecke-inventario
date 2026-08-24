@@ -150,6 +150,17 @@ function EquipmentFormContent({
     [form.categoryId, lookups],
   )
 
+  function selectHolder(currentHolderId: string) {
+    const holder = lookups?.people.find((person) => person.id === currentHolderId)
+    setForm((current) => ({
+      ...current,
+      currentHolderId,
+      // A escolha ainda pode ser ajustada manualmente, mas a associação de um
+      // colaborador sincronizado já sugere o setor correto sem retrabalho.
+      departmentId: holder?.departmentId ?? current.departmentId,
+    }))
+  }
+
   async function submit(event: FormEvent) {
     event.preventDefault()
     if (!form.categoryId) {
@@ -287,7 +298,7 @@ function EquipmentFormContent({
           <Field label="Responsável">
             <select
               value={form.currentHolderId}
-              onChange={(event) => setForm({ ...form, currentHolderId: event.target.value })}
+              onChange={(event) => selectHolder(event.target.value)}
             >
               <option value="">Estoque / sem responsável</option>
               {lookups?.people.map((item) => (
@@ -309,6 +320,7 @@ function EquipmentFormContent({
                 </option>
               ))}
             </select>
+            <p className={styles.notice}>Preenchido automaticamente conforme o responsável, quando disponível.</p>
           </Field>
           <Field label="Local / filial">
             <select

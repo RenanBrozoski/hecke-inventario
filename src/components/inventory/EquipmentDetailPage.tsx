@@ -416,6 +416,12 @@ function TransferPanel({
     }
   }
 
+  function selectPerson(nextPersonId: string) {
+    const person = lookups.people.find((item) => item.id === nextPersonId)
+    setPersonId(nextPersonId)
+    if (person?.departmentId) setDepartmentId(person.departmentId)
+  }
+
   return (
     <div className={styles.card}>
       <div className={styles.pageHeader} style={{ marginBottom: open ? '1rem' : 0 }}>
@@ -444,7 +450,7 @@ function TransferPanel({
         <form onSubmit={submit}>
           <div className={styles.formGrid}>
             <Field label="Responsável">
-              <select value={personId} onChange={(e) => setPersonId(e.target.value)}>
+              <select value={personId} onChange={(e) => selectPerson(e.target.value)}>
                 <option value="">Estoque / sem responsável</option>
                 {lookups.people.map((item) => (
                   <option key={item.id} value={item.id}>
@@ -464,7 +470,7 @@ function TransferPanel({
               </select>
             </Field>
             <p className={`${styles.notice} ${styles.spanTwo}`}>
-              Responsável e setor são independentes. Confirme ambos antes de registrar.
+              O setor é preenchido automaticamente conforme o responsável quando disponível; você pode ajustá-lo antes de registrar.
             </p>
             <Field label="Local / filial">
               <select value={locationId} onChange={(e) => setLocationId(e.target.value)}>

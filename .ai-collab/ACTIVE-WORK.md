@@ -3,7 +3,7 @@
 ## Codex
 
 - **Estado:** disponível para nova fatia.
-- **Última entrega:** gestão aprimorada de Setores e Locais (commit pendente).
+- **Última entrega:** preenchimento automático de setor e rótulo Sistema Operacional (commit pendente).
 - **Arquivos em uso:** nenhum.
 
 ## Claude
