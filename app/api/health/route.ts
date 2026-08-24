@@ -16,7 +16,7 @@ export async function GET() {
   let userCount: number | null = null
 
   try {
-    const rows = await prisma.$queryRaw<{ db: string }[]>`SELECT current_database() AS db`
+    const rows = await prisma.$queryRaw<{ db: string }[]>`SELECT current_database()::text AS db`
     dbName = rows[0]?.db ?? null
     portalCount = await prisma.bitrixPortal.count()
     userCount = await prisma.bitrixUser.count()
