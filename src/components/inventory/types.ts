@@ -116,6 +116,12 @@ export interface EquipmentListResponse {
   totalPages?: number
 }
 
+export interface EquipmentCodeSuggestion {
+  prefix: string | null
+  lastCode: string | null
+  suggestedCode: string | null
+}
+
 export interface PersonSummary {
   id: string
   revision: number

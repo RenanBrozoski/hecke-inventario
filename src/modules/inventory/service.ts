@@ -446,6 +446,35 @@ export async function listEquipment(
   return paginated(items.map(safeEquipment), total, query.page, query.pageSize)
 }
 
+export async function getEquipmentCodeSuggestion(portalId: string, categoryId: string) {
+  const category = await prisma.inventoryCategory.findFirst({
+    where: { id: categoryId, portalId, active: true },
+    select: { prefix: true },
+  })
+  if (!category) throw new InventoryNotFoundError('Categoria não encontrada.')
+  const prefix = category.prefix?.trim().toUpperCase() ?? ''
+  if (!prefix) return { prefix: null, lastCode: null, suggestedCode: null }
+  const equipment = await prisma.inventoryEquipment.findMany({
+    where: { portalId, categoryId, archivedAt: null, patrimony: { not: null } },
+    select: { patrimony: true },
+  })
+  const expression = new RegExp(`^${prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\d+)$`, 'i')
+  const codes = equipment
+    .map((item) => {
+      const match = item.patrimony?.trim().match(expression)
+      return match ? { value: item.patrimony!.trim().toUpperCase(), number: Number(match[1]), digits: match[1]!.length } : null
+    })
+    .filter((item): item is { value: string; number: number; digits: number } => item !== null && Number.isSafeInteger(item.number))
+    .sort((left, right) => right.number - left.number)
+  const latest = codes[0]
+  const digits = Math.max(3, latest?.digits ?? 3)
+  return {
+    prefix,
+    lastCode: latest?.value ?? null,
+    suggestedCode: `${prefix}${String((latest?.number ?? 0) + 1).padStart(digits, '0')}`,
+  }
+}
+
 export async function getEquipment(portalId: string, equipmentId: string) {
   const equipment = await prisma.inventoryEquipment.findFirst({
     where: { id: equipmentId, portalId },

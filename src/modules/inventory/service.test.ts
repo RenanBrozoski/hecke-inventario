@@ -18,7 +18,11 @@ const { prismaMock, tx, recordAuditEventMock } = vi.hoisted(() => {
   }
   return {
     tx: txClient,
-    prismaMock: { $transaction: vi.fn() },
+    prismaMock: {
+      $transaction: vi.fn(),
+      inventoryCategory: { findFirst: vi.fn() },
+      inventoryEquipment: { findMany: vi.fn() },
+    },
     recordAuditEventMock: vi.fn(),
   }
 })
@@ -30,6 +34,7 @@ import { InventoryConflictError } from './http'
 import {
   bulkTransferEquipment,
   redactPasswordValues,
+  getEquipmentCodeSuggestion,
   transferEquipment,
   validateDynamicData,
   type DynamicField,
@@ -89,6 +94,18 @@ describe('segurança de campos dinâmicos', () => {
     )
     expect(redactPasswordValues({ hostname: 'pc', password: '123' }, fields)).toEqual({
       hostname: 'pc',
+    })
+  })
+})
+
+describe('sugestão de código interno', () => {
+  it('apresenta o último código da categoria e sugere o próximo', async () => {
+    prismaMock.inventoryCategory.findFirst.mockResolvedValue({ prefix: 'MN' })
+    prismaMock.inventoryEquipment.findMany.mockResolvedValue([
+      { patrimony: 'MN009' }, { patrimony: 'MN104' }, { patrimony: 'TAG-999' },
+    ])
+    await expect(getEquipmentCodeSuggestion('portal-1', 'cat-monitor')).resolves.toEqual({
+      prefix: 'MN', lastCode: 'MN104', suggestedCode: 'MN105',
     })
   })
 })

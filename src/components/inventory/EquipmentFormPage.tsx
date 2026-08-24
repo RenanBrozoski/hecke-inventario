@@ -11,6 +11,7 @@ import type {
   InventoryContextResponse,
   InventoryFieldLookup,
   InventoryLookupsResponse,
+  EquipmentCodeSuggestion,
 } from './types'
 import styles from './inventory.module.css'
 
@@ -80,6 +81,7 @@ function EquipmentFormContent({
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [codeSuggestion, setCodeSuggestion] = useState<EquipmentCodeSuggestion | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -132,6 +134,16 @@ function EquipmentFormContent({
   useEffect(() => {
     void load()
   }, [load])
+
+  useEffect(() => {
+    if (equipmentId || !form.categoryId) { setCodeSuggestion(null); return }
+    let cancelled = false
+    void authorizedFetch(`/api/inventory/equipment/code-suggestion?categoryId=${encodeURIComponent(form.categoryId)}`)
+      .then(async (response) => response.ok ? response.json() as Promise<EquipmentCodeSuggestion> : null)
+      .then((value) => { if (!cancelled) setCodeSuggestion(value) })
+      .catch(() => { if (!cancelled) setCodeSuggestion(null) })
+    return () => { cancelled = true }
+  }, [authorizedFetch, equipmentId, form.categoryId])
 
   const selectedCategory = useMemo(
     () => lookups?.categories.find((category) => category.id === form.categoryId) ?? null,
@@ -238,14 +250,20 @@ function EquipmentFormContent({
               ))}
             </select>
           </Field>
-          <Field label="Código / TAG">
+          <Field label="Código interno (TI)">
             <input
               value={form.patrimony}
               onChange={(event) => setForm({ ...form, patrimony: event.target.value })}
               maxLength={100}
             />
+            {codeSuggestion?.suggestedCode && (
+              <div className={styles.codeSuggestion}>
+                <span>Último código: <strong>{codeSuggestion.lastCode ?? 'nenhum'}</strong> · sugestão: <strong>{codeSuggestion.suggestedCode}</strong></span>
+                <button type="button" onClick={() => setForm({ ...form, patrimony: codeSuggestion.suggestedCode! })}>Usar sugestão</button>
+              </div>
+            )}
           </Field>
-          <Field label="Nº de patrimônio">
+          <Field label="TAG patrimonial">
             <input
               value={form.assetTag}
               onChange={(event) => setForm({ ...form, assetTag: event.target.value })}

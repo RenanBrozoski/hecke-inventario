@@ -149,9 +149,9 @@ function EquipmentDetailContent({
         <div className={styles.detailGrid}>
           <div className={styles.card}>
             <dl className={styles.definitionList}>
-              <dt>Código / TAG</dt>
+              <dt>Código interno (TI)</dt>
               <dd>{equipment.patrimony || '—'}</dd>
-              <dt>Nº patrimônio</dt>
+              <dt>TAG patrimonial</dt>
               <dd>{equipment.assetTag || '—'}</dd>
               <dt>Número de série</dt>
               <dd>{equipment.serialNumber || '—'}</dd>

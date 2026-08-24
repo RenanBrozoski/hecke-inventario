@@ -289,7 +289,7 @@ function EquipmentListContent({ context }: { context: InventoryContextResponse }
               value={draft.q}
               onChange={(e) => setDraft({ ...draft, q: e.target.value })}
               onKeyDown={(e) => e.key === 'Enter' && applyFilters()}
-              placeholder="Patrimônio, TAG, nome, série, responsável…"
+              placeholder="Código, TAG patrimonial, nome, série, responsável…"
             />
           </div>
           <div className={styles.field}>
@@ -403,7 +403,7 @@ function EquipmentListContent({ context }: { context: InventoryContextResponse }
                     />
                   </th>
                   <SortHeader field="patrimony" current={filters} onSort={handleSort}>
-                    Identificação
+                    Código interno
                   </SortHeader>
                   <SortHeader field="category" current={filters} onSort={handleSort}>
                     Categoria
@@ -546,7 +546,7 @@ function EquipmentRow({
           {label}
         </Link>
         <div className={styles.timelineMeta}>
-          {[item.assetTag && `Patrim. ${item.assetTag}`, item.serialNumber && `S/N ${item.serialNumber}`]
+          {[item.assetTag && `TAG ${item.assetTag}`, item.serialNumber && `S/N ${item.serialNumber}`]
             .filter(Boolean)
             .join(' · ') || null}
         </div>
