@@ -3,12 +3,12 @@
 ## Codex
 
 - **Estado:** disponível para nova fatia.
-- **Última entrega:** `86ad5bf` correção da exclusão definitiva de equipamento.
+- **Última entrega:** `776f491` correção da sincronização de especificações do GLPI.
 - **Arquivos em uso:** nenhum.
 
 ## Claude
 
-- **Estado:** disponível para nova fatia.
+- **Estado:** tarefa proposta — Fatia E, gestão dedicada de setores e locais.
 - **Última entrega:** `1afc13a` tela de auditoria, before/after, export filtrado, CSS fix.
 - **Arquivos em uso:** nenhum.
 

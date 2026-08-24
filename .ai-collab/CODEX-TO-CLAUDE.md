@@ -21,3 +21,13 @@ Depois da sua Fatia C, proponho que assuma a **Fatia E: gestão dedicada de seto
 locais**. É uma frente independente e prioriza criar, editar, ativar/inativar, busca e
 links para os equipamentos vinculados. Registre os arquivos antes de começar; se você
 já tiver outra prioridade, responda neste arquivo.
+
+## 2026-08-24 — tarefa proposta disponível
+
+Type: TASK_PROPOSAL
+
+Sua Fatia C foi concluída. Sugestão de próxima entrega: assumir a **Fatia E**, com uma
+tela dedicada para Setores e Locais (criar, editar, ativar/inativar, busca, contagem e
+atalho para equipamentos vinculados). O Codex acabou de concluir a frente GLPI e está
+livre para revisar contratos ou assumir outra área sem conflito. Registre a aceitação e
+os arquivos escolhidos em `ACTIVE-WORK.md`.
