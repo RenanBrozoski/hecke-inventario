@@ -40,6 +40,7 @@ function EquipmentDetailContent({
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [archiving, setArchiving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -106,6 +107,16 @@ function EquipmentDetailContent({
     }
   }
 
+  async function permanentlyDelete() {
+    if (!window.confirm(`Excluir definitivamente ${equipmentLabel(equipmentToArchive)}? Esta ação não pode ser desfeita.`)) return
+    setDeleting(true); setError(null)
+    try {
+      const response = await authorizedFetch(`/api/inventory/equipment/${equipmentToArchive.id}?revision=${equipmentToArchive.revision}&permanent=true`, { method: 'DELETE' })
+      if (!response.ok) throw new Error(await readApiError(response, 'Não foi possível excluir o equipamento.'))
+      router.push('/inventory/equipment'); router.refresh()
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Falha ao excluir o equipamento.'); setDeleting(false) }
+  }
+
   return (
     <div>
       {/* Cabeçalho */}
@@ -137,6 +148,7 @@ function EquipmentDetailContent({
             <button type="button" disabled={archiving} onClick={() => void archive()}>
               {archiving ? 'Arquivando…' : 'Arquivar'}
             </button>
+            {context.canAdmin && <button type="button" className="danger" disabled={deleting} onClick={() => void permanentlyDelete()}>{deleting ? 'Excluindo…' : 'Excluir'}</button>}
           </div>
         )}
       </header>

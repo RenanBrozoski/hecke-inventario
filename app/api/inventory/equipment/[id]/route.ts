@@ -7,10 +7,10 @@ import {
   requireInventoryRole,
 } from '@/src/modules/inventory/http'
 import { updateEquipmentSchema } from '@/src/modules/inventory/schemas'
-import { archiveEquipment, getEquipment, updateEquipment } from '@/src/modules/inventory/service'
+import { archiveEquipment, getEquipment, permanentlyDeleteEquipment, updateEquipment } from '@/src/modules/inventory/service'
 
 export const dynamic = 'force-dynamic'
-const deleteQuerySchema = z.object({ revision: z.coerce.number().int().min(1) })
+const deleteQuerySchema = z.object({ revision: z.coerce.number().int().min(1), permanent: z.enum(['true']).optional() })
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -41,9 +41,10 @@ export async function DELETE(request: Request, route: RouteContext) {
     const context = await requireInventoryContext(request)
     requireInventoryRole(context, 'OPERATOR')
     const { id } = await route.params
-    const { revision } = deleteQuerySchema.parse(
+    const { revision, permanent } = deleteQuerySchema.parse(
       Object.fromEntries(new URL(request.url).searchParams.entries()),
     )
+    if (permanent) { requireInventoryRole(context, 'ADMIN'); return jsonOk(await permanentlyDeleteEquipment(context, id, revision)) }
     return jsonOk(await archiveEquipment(context, id, revision))
   } catch (error) {
     return inventoryErrorResponse(error)
