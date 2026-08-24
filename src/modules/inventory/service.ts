@@ -619,7 +619,20 @@ export async function updateEquipment(
         // optou por limpá-la.
         for (const key of Object.keys(specs)) delete legacyInvalidSpecs[key]
       }
+      const SCALAR_AUDIT_FIELDS = [
+        'patrimony', 'assetTag', 'name', 'categoryId', 'status',
+        'currentHolderId', 'departmentId', 'locationId', 'locationDetail',
+        'serialNumber', 'invoiceNumber', 'acquiredAt', 'receivedAt',
+        'deliveredAt', 'warrantyEndsAt', 'notes',
+      ] as const
       const changedFields = Object.keys(input).filter((key) => key !== 'revision')
+      const auditBefore: Record<string, unknown> = {}
+      const auditAfter: Record<string, unknown> = {}
+      for (const f of SCALAR_AUDIT_FIELDS) {
+        if (!changedFields.includes(f)) continue
+        auditBefore[f] = (current as Record<string, unknown>)[f] ?? null
+        auditAfter[f] = (input as Record<string, unknown>)[f] ?? null
+      }
       const data: Prisma.InventoryEquipmentUncheckedUpdateManyInput = {
         patrimony: input.patrimony,
         assetTag: input.assetTag,
@@ -701,7 +714,7 @@ export async function updateEquipment(
           action: 'inventory_equipment_updated',
           entityType: 'InventoryEquipment',
           entityId: equipmentId,
-          metadata: { origin, changedFields, movementId },
+          metadata: { origin, changedFields, movementId, before: auditBefore, after: auditAfter },
         },
         tx,
       )

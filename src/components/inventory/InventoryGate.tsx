@@ -38,6 +38,7 @@ const NAV_SECTIONS: NavigationSection[] = [
     label: 'Administração',
     items: [
       { href: '/inventory/custom', label: 'Personalizados', icon: '＋' },
+      { href: '/inventory/audit', label: 'Auditoria', icon: '◑', adminOnly: true },
       { href: '/inventory/imports', label: 'Importar planilha', icon: '⇧', adminOnly: true },
       { href: '/inventory/settings', label: 'Configurações', icon: '⚙', adminOnly: true },
     ],

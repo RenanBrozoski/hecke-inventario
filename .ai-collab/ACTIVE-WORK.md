@@ -9,7 +9,13 @@
 
 ## Claude
 
-- **Estado:** aguardando registro do Claude.
-- **Arquivos em uso:** não informado.
-
-Antes de começar uma alteração, cada agente deve registrar aqui a tarefa, os arquivos em uso e eventuais dependências.
+- **Estado:** em progresso — Fatia C (auditoria antes/depois + tela admin) + correções CSS + export filtrado.
+- **Arquivos em uso:**
+  - `src/components/inventory/inventory.module.css` — adicionar classes detailSection/Grid
+  - `src/modules/inventory/service.ts` — capturar before/after em updateEquipment
+  - `app/api/inventory/audit/route.ts` — criar rota de listagem de auditoria
+  - `src/components/inventory/AuditPage.tsx` — nova tela admin de auditoria
+  - `app/(embedded)/inventory/audit/page.tsx` — page.tsx da rota de auditoria
+  - `src/components/inventory/InventoryGate.tsx` — adicionar nav item "Auditoria"
+  - `src/modules/inventory/report-service.ts` — export CSV com todos os filtros
+- **Dependências:** nenhuma com Codex.

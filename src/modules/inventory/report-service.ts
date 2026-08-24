@@ -178,10 +178,28 @@ export async function listInventoryMovements(portalId: string, query: PageQuery 
   return { ...paginate([], query), items, total, totalPages: Math.ceil(total / query.pageSize) }
 }
 
-export async function listInventoryAudit(portalId: string, query: PageQuery & { q?: string }) {
+export async function listInventoryAudit(
+  portalId: string,
+  query: PageQuery & {
+    q?: string
+    action?: string
+    entityType?: string
+    dateFrom?: string
+    dateTo?: string
+  },
+) {
   const where: Prisma.AuditLogWhereInput = {
     portalId,
-    action: { startsWith: 'inventory_' },
+    action: query.action ? { equals: query.action } : { startsWith: 'inventory_' },
+    ...(query.entityType ? { entityType: query.entityType } : {}),
+    ...(query.dateFrom || query.dateTo
+      ? {
+          createdAt: {
+            ...(query.dateFrom ? { gte: new Date(`${query.dateFrom}T00:00:00.000Z`) } : {}),
+            ...(query.dateTo ? { lte: new Date(`${query.dateTo}T23:59:59.999Z`) } : {}),
+          },
+        }
+      : {}),
     ...(query.q
       ? {
           AND: [
@@ -236,9 +254,38 @@ export function serializeInventoryCsv(rows: unknown[][]): string {
     .join('\r\n')}\r\n`
 }
 
-export async function exportInventoryEquipmentCsv(portalId: string, categoryId?: string) {
+export async function exportInventoryEquipmentCsv(
+  portalId: string,
+  opts: {
+    categoryId?: string
+    status?: string
+    departmentId?: string
+    locationId?: string
+    q?: string
+    archived?: boolean
+  } = {},
+) {
+  const { categoryId, status, departmentId, locationId, q, archived } = opts
+  const archivedFilter = archived ? {} : { archivedAt: null }
   const equipment = await prisma.inventoryEquipment.findMany({
-    where: { portalId, archivedAt: null, ...(categoryId ? { categoryId } : {}) },
+    where: {
+      portalId,
+      ...archivedFilter,
+      ...(categoryId ? { categoryId } : {}),
+      ...(status ? { status: status as never } : {}),
+      ...(departmentId ? { departmentId } : {}),
+      ...(locationId ? { locationId } : {}),
+      ...(q
+        ? {
+            OR: [
+              { patrimony: { contains: q, mode: 'insensitive' } },
+              { assetTag: { contains: q, mode: 'insensitive' } },
+              { name: { contains: q, mode: 'insensitive' } },
+              { serialNumber: { contains: q, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    },
     orderBy: [{ category: { sortOrder: 'asc' } }, { patrimony: 'asc' }, { id: 'asc' }],
     include: {
       category: {
@@ -254,7 +301,7 @@ export async function exportInventoryEquipmentCsv(portalId: string, categoryId?:
     },
   })
 
-  const fieldColumns = categoryId
+  const fieldColumns = categoryId && equipment.length > 0
     ? (equipment[0]?.category.fields ?? [])
         .filter((field) => field.active && field.listVisible && field.type !== 'PASSWORD')
         .map((field) => ({
