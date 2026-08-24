@@ -11,6 +11,13 @@ const glpiItemSchema = z.object({
   manufacturer: z.string().trim().max(200).nullable().optional(),
   model: z.string().trim().max(200).nullable().optional(),
   operatingSystem: z.string().trim().max(300).nullable().optional(),
+  motherboard: z.string().trim().max(300).nullable().optional(),
+  processor: z.string().trim().max(300).nullable().optional(),
+  memory: z.string().trim().max(300).nullable().optional(),
+  memoryModules: z.number().int().min(0).max(64).nullable().optional(),
+  storage: z.string().trim().max(300).nullable().optional(),
+  macCable: z.string().trim().max(50).nullable().optional(),
+  macWifi: z.string().trim().max(50).nullable().optional(),
 })
 
 export const glpiSyncPayloadSchema = z.object({
@@ -66,10 +73,20 @@ export async function syncGlpiComputers(payload: GlpiSyncPayload) {
         operatingSystem: nullable(item.operatingSystem),
         syncedAt: new Date().toISOString(),
       }
+      const visibleSpecs = {
+        windows: nullable(item.operatingSystem),
+        placa_mae: nullable(item.motherboard),
+        processador: nullable(item.processor),
+        ram: nullable(item.memory),
+        ram_pentes: item.memoryModules ?? null,
+        armazenamento: nullable(item.storage),
+        mac_cabo: nullable(item.macCable),
+        mac_wifi: nullable(item.macWifi),
+      }
       if (existing) {
         const specs = typeof existing.specs === 'object' && existing.specs && !Array.isArray(existing.specs)
-          ? { ...existing.specs, glpi: glpiSpecs }
-          : { glpi: glpiSpecs }
+          ? { ...existing.specs, ...visibleSpecs, glpi: glpiSpecs }
+          : { ...visibleSpecs, glpi: glpiSpecs }
         await tx.inventoryEquipment.update({
           where: { id: existing.id },
           data: {
@@ -92,7 +109,7 @@ export async function syncGlpiComputers(payload: GlpiSyncPayload) {
             serialNumber: nullable(item.serialNumber),
             assetTag: nullable(item.assetTag),
             status: InventoryEquipmentStatus.ACTIVE,
-            specs: { glpi: glpiSpecs },
+            specs: { ...visibleSpecs, glpi: glpiSpecs },
           },
         })
         await tx.auditLog.create({

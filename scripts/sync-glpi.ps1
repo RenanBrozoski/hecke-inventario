@@ -21,6 +21,12 @@ function First-GlpiValue($Value) {
   return $Value
 }
 
+function Get-GlpiName($Headers, [string]$Type, $Id) {
+  if (-not $Id) { return $null }
+  $record = Invoke-RestMethod -Uri "$glpiBaseUrl/apirest.php/$Type/$Id" -Headers $Headers -TimeoutSec 30
+  return [string](First-GlpiValue $record.name)
+}
+
 $glpiBaseUrl = (Require-Environment 'GLPI_BASE_URL').TrimEnd('/')
 $glpiAppToken = Require-Environment 'GLPI_APP_TOKEN'
 $inventoryUrl = (Require-Environment 'INVENTORY_GLPI_SYNC_URL').TrimEnd('/')
@@ -58,7 +64,7 @@ try {
   }
   $computers = @(Invoke-RestMethod -Uri "$glpiBaseUrl/apirest.php/Computer/" -Headers $headers -TimeoutSec 60 | Select-Object -First $PageSize)
   $items = foreach ($computer in $computers) {
-    $detail = Invoke-RestMethod -Uri "$glpiBaseUrl/apirest.php/Computer/$($computer.id)" -Headers $headers -TimeoutSec 30
+    $detail = Invoke-RestMethod -Uri "$glpiBaseUrl/apirest.php/Computer/$($computer.id)?expand_dropdowns=true" -Headers $headers -TimeoutSec 30
     $computerId = First-GlpiValue $detail.id
     $computerName = First-GlpiValue $detail.name
     $serial = First-GlpiValue $detail.serial
@@ -66,6 +72,14 @@ try {
     $manufacturer = First-GlpiValue $detail.manufacturers_id
     $model = First-GlpiValue $detail.computermodels_id
     $operatingSystem = First-GlpiValue $detail.operatingsystems_id
+    $processors = @(Invoke-RestMethod -Uri "$glpiBaseUrl/apirest.php/Computer/$computerId/Item_DeviceProcessor" -Headers $headers -TimeoutSec 30)
+    $memories = @(Invoke-RestMethod -Uri "$glpiBaseUrl/apirest.php/Computer/$computerId/Item_DeviceMemory" -Headers $headers -TimeoutSec 30)
+    $drives = @(Invoke-RestMethod -Uri "$glpiBaseUrl/apirest.php/Computer/$computerId/Item_DeviceHardDrive" -Headers $headers -TimeoutSec 30)
+    $cards = @(Invoke-RestMethod -Uri "$glpiBaseUrl/apirest.php/Computer/$computerId/Item_DeviceNetworkCard" -Headers $headers -TimeoutSec 30)
+    $processor = $processors | Select-Object -First 1
+    $processorName = if ($processor) { Get-GlpiName $headers 'DeviceProcessor' $processor.deviceprocessors_id } else { $null }
+    $ramMb = @($memories | ForEach-Object { [int]$_.size } | Measure-Object -Sum).Sum
+    $driveText = @($drives | ForEach-Object { "{0:N0} GB" -f ([double]$_.capacity / 1000) }) -join ' + '
     [ordered]@{
       id = [int]$computerId
       name = if ($computerName) { [string]$computerName } else { "Computador GLPI $computerId" }
@@ -74,6 +88,13 @@ try {
       manufacturer = if ($manufacturer) { [string]$manufacturer } else { $null }
       model = if ($model) { [string]$model } else { $null }
       operatingSystem = if ($operatingSystem) { [string]$operatingSystem } else { $null }
+      motherboard = ((@($manufacturer, $model) | Where-Object { $_ }) -join ' ')
+      processor = if ($processorName) { "$processorName ($($processor.frequency) MHz)" } else { $null }
+      memory = if ($ramMb) { "{0:N0} GB" -f ([double]$ramMb / 1024) } else { $null }
+      memoryModules = @($memories).Count
+      storage = if ($driveText) { $driveText } else { $null }
+      macCable = if ($cards.Count -gt 0) { [string]$cards[0].mac } else { $null }
+      macWifi = if ($cards.Count -gt 1) { [string]$cards[1].mac } else { $null }
     }
   }
   if (-not $items.Count) { Write-Output 'GLPI não retornou computadores para sincronizar.'; exit 0 }
