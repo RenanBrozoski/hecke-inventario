@@ -682,6 +682,22 @@
   padding-bottom: 0;
 }
 
+.timelineAction {
+  font-size: 0.85rem;
+  margin-bottom: 0.2rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.timelineTypeBadge {
+  background: var(--color-bg-subtle);
+  color: var(--color-text-muted);
+  font-size: 0.65rem;
+  letter-spacing: 0.03em;
+}
+
 .timelineMeta {
   color: var(--color-text-muted);
   font-size: 0.75rem;
@@ -731,7 +747,7 @@
 
 .detailGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 1rem 1.25rem;
 }
 
