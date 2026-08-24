@@ -291,6 +291,12 @@ tbody tr:hover {
    filtros ficam espremidas em 1100px; desktop corporativo tem telas largas. */
 .app-shell__main:has(.module) {
   max-width: none;
+  padding: var(--space-3);
+}
+/* A navegação completa do Inventário mora em InventoryGate. Ao exibi-la,
+   escondemos a barra legada do shell para não criar duas sidebars concorrentes. */
+.app-shell:has(.module) .app-shell__nav {
+  display: none;
 }
 /* O editor de Aplicativo (aba Processo em especial, canvas BPMN) precisa de
    toda a largura disponível — a leitura confortável de 1100px que serve bem
