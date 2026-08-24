@@ -33,6 +33,19 @@ export function searchParamsObject(url: URL): Record<string, string> {
 export const equipmentListQuerySchema = paginationQuerySchema.extend({
   status: z.nativeEnum(InventoryEquipmentStatus).optional(),
   categoryId: id.optional(),
+  categoryIds: z
+    .string()
+    .trim()
+    .max(2000)
+    .transform((value, context) => {
+      const ids = value.split(',').map((item) => item.trim()).filter(Boolean)
+      if (!ids.length || ids.some((item) => item.length > 100)) {
+        context.addIssue({ code: z.ZodIssueCode.custom, message: 'Categorias inválidas.' })
+        return z.NEVER
+      }
+      return [...new Set(ids)]
+    })
+    .optional(),
   holderId: id.optional(),
   departmentId: id.optional(),
   locationId: id.optional(),

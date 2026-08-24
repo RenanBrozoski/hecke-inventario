@@ -30,6 +30,7 @@ interface Filters {
   q: string
   status: string
   categoryId: string
+  categoryIds: string
   departmentId: string
   locationId: string
   archived: string
@@ -42,6 +43,7 @@ const DEFAULT_FILTERS: Filters = {
   q: '',
   status: '',
   categoryId: '',
+  categoryIds: '',
   departmentId: '',
   locationId: '',
   archived: 'exclude',
@@ -52,6 +54,26 @@ const DEFAULT_FILTERS: Filters = {
 
 const PAGE_SIZE_OPTIONS = ['25', '50', '100']
 
+const CATEGORY_GROUPS = [
+  { key: 'computers', label: 'Computadores', description: 'Desktops e notebooks', match: /desktop|notebook|computador/i },
+  { key: 'phones', label: 'Celulares', description: 'Smartphones e tablets', match: /smartphone|celular|tablet/i },
+  { key: 'monitors', label: 'Monitores', description: 'Telas e periféricos visuais', match: /monitor/i },
+] as const
+
+function groupCategoryIds(
+  categories: InventoryLookupsResponse['categories'],
+  key: (typeof CATEGORY_GROUPS)[number]['key'] | 'other',
+) {
+  if (key === 'other') {
+    return categories
+      .filter((category) => !CATEGORY_GROUPS.some((group) => group.match.test(category.name)))
+      .map((category) => category.id)
+  }
+  return categories
+    .filter((category) => CATEGORY_GROUPS.find((group) => group.key === key)?.match.test(category.name))
+    .map((category) => category.id)
+}
+
 export function EquipmentListPage() {
   return <InventoryGate>{(context) => <EquipmentListContent context={context} />}</InventoryGate>
 }
@@ -61,6 +83,7 @@ function filtersFromParams(params: URLSearchParams): Filters {
     q: params.get('q') ?? '',
     status: params.get('status') ?? '',
     categoryId: params.get('categoryId') ?? '',
+    categoryIds: params.get('categoryIds') ?? '',
     departmentId: params.get('departmentId') ?? '',
     locationId: params.get('locationId') ?? '',
     archived: params.get('archived') ?? 'exclude',
@@ -75,6 +98,7 @@ function filtersToParams(filters: Filters, page: number): URLSearchParams {
   if (filters.q) params.set('q', filters.q)
   if (filters.status) params.set('status', filters.status)
   if (filters.categoryId) params.set('categoryId', filters.categoryId)
+  if (filters.categoryIds) params.set('categoryIds', filters.categoryIds)
   if (filters.departmentId) params.set('departmentId', filters.departmentId)
   if (filters.locationId) params.set('locationId', filters.locationId)
   if (filters.archived !== 'exclude') params.set('archived', filters.archived)
@@ -100,6 +124,7 @@ function EquipmentListContent({ context }: { context: InventoryContextResponse }
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
   const lookupsLoaded = useRef(false)
+  const initialGroupApplied = useRef(false)
 
   const loadLookups = useCallback(async () => {
     if (lookupsLoaded.current) return
@@ -115,6 +140,7 @@ function EquipmentListContent({ context }: { context: InventoryContextResponse }
     if (filters.q) params.set('q', filters.q)
     if (filters.status) params.set('status', filters.status)
     if (filters.categoryId) params.set('categoryId', filters.categoryId)
+    if (filters.categoryIds) params.set('categoryIds', filters.categoryIds)
     if (filters.departmentId) params.set('departmentId', filters.departmentId)
     if (filters.locationId) params.set('locationId', filters.locationId)
     if (filters.archived !== 'exclude') params.set('archived', filters.archived)
@@ -143,6 +169,18 @@ function EquipmentListContent({ context }: { context: InventoryContextResponse }
     void load()
   }, [load])
 
+  // A tela abre em Computadores para não misturar PC, monitor e celular logo de saída.
+  useEffect(() => {
+    if (initialGroupApplied.current || !lookups || filters.categoryId || filters.categoryIds) return
+    initialGroupApplied.current = true
+    const computerIds = groupCategoryIds(lookups.categories, 'computers')
+    if (!computerIds.length) return
+    const next = { ...filters, categoryIds: computerIds.join(',') }
+    setFilters(next)
+    setDraft(next)
+    setPage(1)
+  }, [filters, lookups])
+
   // Keep URL in sync with current state
   useEffect(() => {
     const params = filtersToParams(filters, page)
@@ -166,6 +204,14 @@ function EquipmentListContent({ context }: { context: InventoryContextResponse }
     const nextDir: SortDir =
       filters.sort === field && filters.dir === 'desc' ? 'asc' : 'desc'
     const next = { ...filters, sort: field, dir: nextDir }
+    setFilters(next)
+    setDraft(next)
+    setPage(1)
+  }
+
+  function selectCategoryGroup(key: (typeof CATEGORY_GROUPS)[number]['key'] | 'other' | 'all') {
+    const ids = key === 'all' ? [] : groupCategoryIds(lookups?.categories ?? [], key)
+    const next = { ...filters, categoryId: '', categoryIds: ids.join(',') }
     setFilters(next)
     setDraft(next)
     setPage(1)
@@ -196,6 +242,7 @@ function EquipmentListContent({ context }: { context: InventoryContextResponse }
     filters.q ||
     filters.status ||
     filters.categoryId ||
+    filters.categoryIds ||
     filters.departmentId ||
     filters.locationId ||
     filters.archived !== 'exclude'
@@ -205,6 +252,7 @@ function EquipmentListContent({ context }: { context: InventoryContextResponse }
     const params = new URLSearchParams()
     if (filters.status) params.set('status', filters.status)
     if (filters.categoryId) params.set('categoryId', filters.categoryId)
+    if (filters.categoryIds) params.set('categoryIds', filters.categoryIds)
     if (filters.departmentId) params.set('departmentId', filters.departmentId)
     if (filters.locationId) params.set('locationId', filters.locationId)
     if (filters.q) params.set('q', filters.q)
@@ -237,6 +285,25 @@ function EquipmentListContent({ context }: { context: InventoryContextResponse }
           )}
         </div>
       </header>
+
+      {lookups && (
+        <section className={styles.categoryWorkbench} aria-label="Separar equipamentos por tipo">
+          <div className={styles.categoryWorkbenchIntro}>
+            <span className={styles.eyebrow}>Navegação rápida</span>
+            <strong>Trabalhe por tipo de ativo</strong>
+            <small>Computadores, celulares e monitores ficam em listas separadas.</small>
+          </div>
+          <div className={styles.categoryGroups}>
+            <CategoryGroupButton label="Todos" description="Inventário completo" active={!filters.categoryId && !filters.categoryIds} onClick={() => selectCategoryGroup('all')} />
+            {CATEGORY_GROUPS.map((group) => {
+              const ids = groupCategoryIds(lookups.categories, group.key)
+              if (!ids.length) return null
+              return <CategoryGroupButton key={group.key} label={group.label} description={group.description} active={filters.categoryIds === ids.join(',')} onClick={() => selectCategoryGroup(group.key)} />
+            })}
+            {groupCategoryIds(lookups.categories, 'other').length > 0 && <CategoryGroupButton label="Outros" description="Coletores, rádios e servidores" active={filters.categoryIds === groupCategoryIds(lookups.categories, 'other').join(',')} onClick={() => selectCategoryGroup('other')} />}
+          </div>
+        </section>
+      )}
 
       {/* Filtros */}
       <div className={styles.filterBar}>
@@ -271,7 +338,7 @@ function EquipmentListContent({ context }: { context: InventoryContextResponse }
             <select
               id="eq-category"
               value={draft.categoryId}
-              onChange={(e) => setDraft({ ...draft, categoryId: e.target.value })}
+              onChange={(e) => setDraft({ ...draft, categoryId: e.target.value, categoryIds: '' })}
             >
               <option value="">Todas</option>
               {lookups?.categories.map((item) => (
@@ -467,6 +534,12 @@ function SortHeader({
       <span className={styles.sortIcon}>{icon || ' ⇅'}</span>
     </th>
   )
+}
+
+function CategoryGroupButton({ label, description, active, onClick }: { label: string; description: string; active: boolean; onClick: () => void }) {
+  return <button type="button" className={`${styles.categoryGroup} ${active ? styles.categoryGroupActive : ''}`} onClick={onClick}>
+    <strong>{label}</strong><span>{description}</span>
+  </button>
 }
 
 function EquipmentRow({

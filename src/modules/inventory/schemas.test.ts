@@ -30,6 +30,13 @@ describe('schemas HTTP do Inventário', () => {
     })
   })
 
+  it('aceita grupo de categorias para separar tipos de ativos', () => {
+    expect(equipmentListQuerySchema.parse({ categoryIds: 'desktop,notebook,desktop' })).toMatchObject({
+      categoryIds: ['desktop', 'notebook'],
+    })
+    expect(equipmentListQuerySchema.safeParse({ categoryIds: ',' }).success).toBe(false)
+  })
+
   it('exige revisão e uma mudança na transferência', () => {
     expect(transferEquipmentSchema.safeParse({ revision: 1 }).success).toBe(false)
     expect(transferEquipmentSchema.safeParse({ revision: 1, locationId: null }).success).toBe(true)

@@ -352,6 +352,7 @@ export async function listEquipment(
     q?: string
     status?: Prisma.EnumInventoryEquipmentStatusFilter['equals']
     categoryId?: string
+    categoryIds?: string[]
     holderId?: string
     departmentId?: string
     locationId?: string
@@ -386,7 +387,11 @@ export async function listEquipment(
     ...(query.archived === 'exclude' ? { archivedAt: null } : {}),
     ...(query.archived === 'only' ? { archivedAt: { not: null } } : {}),
     ...(query.status ? { status: query.status } : {}),
-    ...(query.categoryId ? { categoryId: query.categoryId } : {}),
+    ...(query.categoryIds?.length
+      ? { categoryId: { in: query.categoryIds } }
+      : query.categoryId
+        ? { categoryId: query.categoryId }
+        : {}),
     ...(query.holderId ? { currentHolderId: query.holderId } : {}),
     ...(query.departmentId ? { departmentId: query.departmentId } : {}),
     ...(query.locationId ? { locationId: query.locationId } : {}),
