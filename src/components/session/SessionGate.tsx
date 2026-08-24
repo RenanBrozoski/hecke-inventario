@@ -1,7 +1,6 @@
 'use client'
 
 import type { ReactNode } from 'react'
-import { usePathname } from 'next/navigation'
 import { AppShell } from '@/src/components/layout/AppShell'
 import { type MeResponse, useSession } from './SessionProvider'
 
@@ -17,7 +16,6 @@ interface SessionGateProps {
  * pronta, monta o AppShell (navegação persistente) em volta do conteúdo. */
 export function SessionGate({ children, requireAdmin }: SessionGateProps) {
   const { state } = useSession()
-  const pathname = usePathname()
 
   if (state.status === 'loading') {
     return <main style={{ padding: '2rem', color: 'var(--color-text-muted)' }}>Carregando…</main>
@@ -53,5 +51,5 @@ export function SessionGate({ children, requireAdmin }: SessionGateProps) {
     )
   }
 
-  return <AppShell me={state.me} compact={pathname.startsWith('/inventory')}>{children(state.me)}</AppShell>
+  return <AppShell me={state.me}>{children(state.me)}</AppShell>
 }
