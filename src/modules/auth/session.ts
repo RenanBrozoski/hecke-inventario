@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto'
+import { hkdfSync, randomUUID } from 'crypto'
 import { errors as joseErrors, jwtVerify, SignJWT } from 'jose'
 
 const ISSUER = 'formularios-bitrix'
@@ -8,14 +8,36 @@ const AUDIENCE = 'formularios-bitrix:app'
 // ser renovada, só reaberta via Bitrix24.
 const SESSION_TTL_SECONDS = 25 * 60
 
+// Rótulo de separação de domínio do HKDF: garante que a chave de assinatura
+// derivada NUNCA seja igual à BITRIX_TOKEN_ENCRYPTION_KEY usada para cifrar os
+// tokens do Bitrix24 — mesmo material de origem, finalidades criptográficas
+// distintas.
+const SESSION_KEY_HKDF_INFO = 'inventory-session-jwt-hs256'
+
 function getSecretKey(): Uint8Array {
+  // Preferência: um segredo dedicado, se configurado.
   const secret = process.env.SESSION_JWT_SECRET
-  if (!secret || secret.length < 16) {
-    throw new Error(
-      'SESSION_JWT_SECRET não configurada (ou curta demais) — necessária para assinar a sessão interna.',
-    )
+  if (secret && secret.length >= 16) {
+    return new TextEncoder().encode(secret)
   }
-  return new TextEncoder().encode(secret)
+
+  // Fallback: derivar de BITRIX_TOKEN_ENCRYPTION_KEY (também segredo do
+  // servidor, no mesmo cofre de variáveis). Isso elimina uma variável
+  // obrigatória que, esquecida vazia, derruba TODA a autenticação em silêncio
+  // — /api/auth/exchange consumia o handshake e só então estourava 500 aqui,
+  // aparecendo na tela apenas como "não foi possível estabelecer a sessão".
+  const encKeyRaw = process.env.BITRIX_TOKEN_ENCRYPTION_KEY
+  if (encKeyRaw) {
+    const ikm = Buffer.from(encKeyRaw, 'base64')
+    if (ikm.length >= 16) {
+      return new Uint8Array(hkdfSync('sha256', ikm, new Uint8Array(0), SESSION_KEY_HKDF_INFO, 32))
+    }
+  }
+
+  throw new Error(
+    'Nenhum segredo disponível para assinar a sessão: configure SESSION_JWT_SECRET ' +
+      '(16+ caracteres) ou BITRIX_TOKEN_ENCRYPTION_KEY (base64 de 16+ bytes).',
+  )
 }
 
 export interface SessionPayload {
