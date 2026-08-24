@@ -296,6 +296,11 @@ tbody tr:hover {
   max-width: none;
   padding: var(--space-3);
 }
+.app-shell__main--wide {
+  width: 100%;
+  max-width: none;
+  padding: var(--space-3);
+}
 /* A navegação completa do Inventário mora em InventoryGate. Ao exibi-la,
    escondemos a barra legada do shell para não criar duas sidebars concorrentes. */
 .app-shell:has(.module) .app-shell__nav {

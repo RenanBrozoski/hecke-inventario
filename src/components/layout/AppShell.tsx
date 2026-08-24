@@ -7,7 +7,7 @@ import type { MeResponse } from '@/src/components/session/SessionProvider'
 export function AppShell({ children }: { me: MeResponse; children: ReactNode }) {
   return (
     <div className="app-shell app-shell--compact">
-      <main className="app-shell__main">{children}</main>
+      <main className="app-shell__main app-shell__main--wide">{children}</main>
     </div>
   )
 }
