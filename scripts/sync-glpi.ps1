@@ -28,6 +28,7 @@ $inventoryToken = Require-Environment 'GLPI_SYNC_TOKEN'
 $portalDomain = Require-Environment 'BITRIX_PORTAL_DOMAIN'
 $categoryName = Require-Environment 'GLPI_CATEGORY_NAME'
 $profileId = [Environment]::GetEnvironmentVariable('GLPI_PROFILE_ID')
+$vercelBypassSecret = [Environment]::GetEnvironmentVariable('VERCEL_AUTOMATION_BYPASS_SECRET')
 $userToken = [Environment]::GetEnvironmentVariable('GLPI_USER_TOKEN')
 $username = [Environment]::GetEnvironmentVariable('GLPI_USERNAME')
 $password = [Environment]::GetEnvironmentVariable('GLPI_PASSWORD')
@@ -77,7 +78,11 @@ try {
   }
   if (-not $items.Count) { Write-Output 'GLPI não retornou computadores para sincronizar.'; exit 0 }
   $payload = @{ portalDomain = $portalDomain; categoryName = $categoryName; items = @($items) } | ConvertTo-Json -Depth 6
-  $result = Invoke-RestMethod -Uri $inventoryUrl -Method Post -Headers @{ 'X-GLPI-Sync-Token' = $inventoryToken } -ContentType 'application/json' -Body $payload -TimeoutSec 90
+  $inventoryHeaders = @{ 'X-GLPI-Sync-Token' = $inventoryToken }
+  if (-not [string]::IsNullOrWhiteSpace($vercelBypassSecret)) {
+    $inventoryHeaders['x-vercel-protection-bypass'] = $vercelBypassSecret
+  }
+  $result = Invoke-RestMethod -Uri $inventoryUrl -Method Post -Headers $inventoryHeaders -ContentType 'application/json' -Body $payload -TimeoutSec 90
   Write-Output "Sincronização concluída: $($result.created) criado(s), $($result.updated) atualizado(s)."
 } finally {
   if ($session -and $session.session_token) {

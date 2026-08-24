@@ -20,6 +20,7 @@ $env:GLPI_SYNC_TOKEN = 'o mesmo segredo configurado na Vercel'
 $env:BITRIX_PORTAL_DOMAIN = 'hecke.bitrix24.com.br'
 $env:GLPI_CATEGORY_NAME = 'Desktop'
 $env:GLPI_PROFILE_ID = '4' # Super-Admin do usuário Renan neste GLPI
+$env:VERCEL_AUTOMATION_BYPASS_SECRET = 'segredo de Protection Bypass for Automation da Vercel'
 ```
 
 O script só cria/atualiza dados técnicos detectados pelo GLPI (nome, série,
