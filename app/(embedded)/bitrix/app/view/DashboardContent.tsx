@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import Link from 'next/link'
 import type { MeResponse } from '@/src/components/session/SessionProvider'
 import { useSession } from '@/src/components/session/SessionProvider'
 
@@ -64,6 +65,9 @@ export function DashboardContent({ me }: { me: MeResponse }) {
             {me.portal.domain} · instalação <span className="badge badge-success">{me.portal.status}</span>
           </p>
         </div>
+        <Link href="/inventory" className="btn btn-primary">
+          Abrir inventário
+        </Link>
       </div>
 
       <div className="card">
