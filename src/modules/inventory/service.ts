@@ -1064,12 +1064,18 @@ export async function archiveEquipment(
 /** Exclusão definitiva administrativa. Remove movimentos e anexos vinculados;
  * termos e auditoria são preservados como registros históricos independentes. */
 export async function permanentlyDeleteEquipment(context: InventoryContext, equipmentId: string, revision: number) {
+  const corporateLinesAvailable = await prisma.inventoryCorporateLine.count({ take: 1 }).then(() => true).catch((error: unknown) => {
+    if (error instanceof PrismaRuntime.PrismaClientKnownRequestError && error.code === 'P2021') return false
+    throw error
+  })
   return prisma.$transaction(async (tx) => {
     await tx.inventoryMovement.deleteMany({ where: { portalId: context.portalId, equipmentId } })
     await tx.inventoryAttachment.deleteMany({ where: { portalId: context.portalId, entityType: 'EQUIPMENT', entityId: equipmentId } })
-    await tx.inventoryCorporateLine.updateMany({ where: { portalId: context.portalId, equipmentId }, data: { equipmentId: null } })
-    await tx.inventoryCorporateLineHistory.updateMany({ where: { portalId: context.portalId, fromEquipmentId: equipmentId }, data: { fromEquipmentId: null } })
-    await tx.inventoryCorporateLineHistory.updateMany({ where: { portalId: context.portalId, toEquipmentId: equipmentId }, data: { toEquipmentId: null } })
+    if (corporateLinesAvailable) {
+      await tx.inventoryCorporateLine.updateMany({ where: { portalId: context.portalId, equipmentId }, data: { equipmentId: null } })
+      await tx.inventoryCorporateLineHistory.updateMany({ where: { portalId: context.portalId, fromEquipmentId: equipmentId }, data: { fromEquipmentId: null } })
+      await tx.inventoryCorporateLineHistory.updateMany({ where: { portalId: context.portalId, toEquipmentId: equipmentId }, data: { toEquipmentId: null } })
+    }
     const result = await tx.inventoryEquipment.deleteMany({ where: { id: equipmentId, portalId: context.portalId, revision } })
     if (result.count !== 1) throw new InventoryConflictError('O equipamento foi alterado ou já removido. Recarregue a página.')
     await recordAuditEvent({ portalId: context.portalId, bitrixUserId: context.bitrixUserId, action: 'inventory_equipment_deleted', entityType: 'InventoryEquipment', entityId: equipmentId }, tx)
