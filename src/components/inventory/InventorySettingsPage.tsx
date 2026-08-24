@@ -33,6 +33,10 @@ interface BitrixUser {
   email?: string | null
   position?: string | null
 }
+interface ManagedLookup extends NamedLookup {
+  active: boolean
+  _count?: { equipment?: number; people?: number }
+}
 type Section = 'categories' | 'departments' | 'locations' | 'access'
 
 export function InventorySettingsPage() {
@@ -43,8 +47,8 @@ function SettingsContent({ context }: { context: InventoryContextResponse }) {
   const { authorizedFetch } = useSession()
   const [section, setSection] = useState<Section>('categories')
   const [categories, setCategories] = useState<Category[]>([])
-  const [departments, setDepartments] = useState<NamedLookup[]>([])
-  const [locations, setLocations] = useState<NamedLookup[]>([])
+  const [departments, setDepartments] = useState<ManagedLookup[]>([])
+  const [locations, setLocations] = useState<ManagedLookup[]>([])
   const [assignments, setAssignments] = useState<RoleAssignment[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -62,8 +66,8 @@ function SettingsContent({ context }: { context: InventoryContextResponse }) {
         if (!response.ok)
           throw new Error(await readApiError(response, 'Não foi possível carregar a configuração.'))
       setCategories(((await catRes.json()) as { items: Category[] }).items)
-      setDepartments(((await depRes.json()) as { items: NamedLookup[] }).items)
-      setLocations(((await locRes.json()) as { items: NamedLookup[] }).items)
+      setDepartments(((await depRes.json()) as { items: ManagedLookup[] }).items)
+      setLocations(((await locRes.json()) as { items: ManagedLookup[] }).items)
       setAssignments(((await roleRes.json()) as { items: RoleAssignment[] }).items)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Falha ao carregar a configuração.')
@@ -282,6 +286,7 @@ function CategoriesSettings({
                       <th>Chave</th>
                       <th>Tipo</th>
                       <th>Lista</th>
+                      <th></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -293,6 +298,15 @@ function CategoriesSettings({
                         </td>
                         <td>{FIELD_TYPE_LABELS[item.type]}</td>
                         <td>{item.listVisible ? 'Sim' : 'Não'}</td>
+                        <td>
+                          {item.active !== false ? (
+                            <button type="button" onClick={() => void deactivateField(item.id, item.label)}>
+                              Remover
+                            </button>
+                          ) : (
+                            <span className={styles.muted}>Removido</span>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -372,6 +386,18 @@ function CategoriesSettings({
       </div>
     </div>
   )
+
+  async function deactivateField(fieldId: string, label: string) {
+    if (!selected || !window.confirm(`Remover o campo “${label}”? Os dados já salvos serão preservados.`)) return
+    setSaving(true); setError(null)
+    try {
+      const response = await authorizedFetch(`/api/inventory/categories/${selected.id}/fields/${fieldId}`, { method: 'DELETE' })
+      if (!response.ok) throw new Error(await readApiError(response, 'Não foi possível remover o campo.'))
+      await reload()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Falha ao remover o campo.')
+    } finally { setSaving(false) }
+  }
 }
 
 function NamedSettings({
@@ -382,12 +408,13 @@ function NamedSettings({
 }: {
   title: string
   endpoint: 'departments' | 'locations'
-  items: NamedLookup[]
+  items: ManagedLookup[]
   reload: () => Promise<void>
 }) {
   const { authorizedFetch } = useSession()
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
+  const [editing, setEditing] = useState<ManagedLookup | null>(null)
   const [error, setError] = useState<string | null>(null)
   async function create(event: FormEvent) {
     event.preventDefault()
@@ -407,11 +434,36 @@ function NamedSettings({
       setError(cause instanceof Error ? cause.message : 'Falha ao criar o registro.')
     }
   }
+  async function saveEdit(event: FormEvent) {
+    event.preventDefault()
+    if (!editing) return
+    setError(null)
+    try {
+      const response = await authorizedFetch(`/api/inventory/${endpoint}/${editing.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name.trim(), description: description.trim() || null, active: editing.active }),
+      })
+      if (!response.ok) throw new Error(await readApiError(response, 'Não foi possível atualizar o registro.'))
+      setEditing(null); setName(''); setDescription(''); await reload()
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Falha ao atualizar o registro.') }
+  }
+  async function toggleActive(item: ManagedLookup) {
+    const action = item.active ? 'desativar' : 'ativar'
+    if (!window.confirm(`${action[0]!.toUpperCase()}${action.slice(1)} “${item.name}”?`)) return
+    setError(null)
+    try {
+      const response = await authorizedFetch(`/api/inventory/${endpoint}/${item.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ active: !item.active }),
+      })
+      if (!response.ok) throw new Error(await readApiError(response, `Não foi possível ${action} o registro.`))
+      await reload()
+    } catch (cause) { setError(cause instanceof Error ? cause.message : `Falha ao ${action} o registro.`) }
+  }
   return (
     <section className={styles.card}>
       <h2>{title}</h2>
       {error && <p className="alert alert-error">{error}</p>}
-      <form className={styles.formGrid} onSubmit={create}>
+      <form className={styles.formGrid} onSubmit={editing ? saveEdit : create}>
         <Field label="Nome">
           <input value={name} onChange={(event) => setName(event.target.value)} required />
         </Field>
@@ -419,8 +471,9 @@ function NamedSettings({
           <input value={description} onChange={(event) => setDescription(event.target.value)} />
         </Field>
         <button type="submit" className="primary">
-          Adicionar
+          {editing ? 'Salvar alterações' : 'Adicionar'}
         </button>
+        {editing && <button type="button" onClick={() => { setEditing(null); setName(''); setDescription('') }}>Cancelar</button>}
       </form>
       <div className={`${styles.tableWrap} ${styles.sectionTitle}`}>
         <table>
@@ -428,6 +481,8 @@ function NamedSettings({
             <tr>
               <th>Nome</th>
               <th>Descrição</th>
+              <th>Situação</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -435,6 +490,11 @@ function NamedSettings({
               <tr key={item.id}>
                 <td>{item.name}</td>
                 <td>{item.description || '—'}</td>
+                <td>{item.active ? 'Ativo' : 'Inativo'}</td>
+                <td className={styles.rowActions}>
+                  <button type="button" onClick={() => { setEditing(item); setName(item.name); setDescription(item.description ?? '') }}>Editar</button>
+                  <button type="button" onClick={() => void toggleActive(item)}>{item.active ? 'Desativar' : 'Ativar'}</button>
+                </td>
               </tr>
             ))}
           </tbody>

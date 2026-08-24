@@ -257,6 +257,7 @@ enum InventoryEquipmentStatus {
   MAINTENANCE
   BROKEN
   LOANED
+  LOST
   INACTIVE
 }
 

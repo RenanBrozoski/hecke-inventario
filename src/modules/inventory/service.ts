@@ -1087,21 +1087,6 @@ export async function getPerson(portalId: string, personId: string) {
         include: EQUIPMENT_INCLUDE,
       },
       termsAsOrigin: { where: { archivedAt: null }, orderBy: { createdAt: 'desc' } },
-      corporateLines: {
-        where: { archivedAt: null },
-        orderBy: { normalizedNumber: 'asc' },
-        include: {
-          equipment: {
-            select: {
-              id: true,
-              patrimony: true,
-              assetTag: true,
-              name: true,
-              category: { select: { name: true } },
-            },
-          },
-        },
-      },
       movementsFrom: {
         orderBy: { createdAt: 'desc' },
         take: 100,
@@ -1115,7 +1100,7 @@ export async function getPerson(portalId: string, personId: string) {
     },
   })
   if (!person) throw new InventoryNotFoundError('Pessoa não encontrada.')
-  const [extensions, audit] = await Promise.all([
+  const [extensions, audit, corporateLinesResult] = await Promise.all([
     prisma.inventoryExtension.findMany({
       where: {
         portalId,
@@ -1134,6 +1119,31 @@ export async function getPerson(portalId: string, personId: string) {
       orderBy: { createdAt: 'desc' },
       take: 100,
     }),
+    prisma.inventoryCorporateLine
+      .findMany({
+        where: { portalId, currentHolderId: person.id, archivedAt: null },
+        orderBy: { normalizedNumber: 'asc' },
+        include: {
+          equipment: {
+            select: {
+              id: true,
+              patrimony: true,
+              assetTag: true,
+              name: true,
+              category: { select: { name: true } },
+            },
+          },
+        },
+      })
+      // O deploy de aplicação pode chegar antes da migration no Neon. A ficha
+      // continua utilizável (sem linhas) até a infraestrutura aplicar a tabela.
+      .catch((error: unknown) => {
+        if (
+          error instanceof PrismaRuntime.PrismaClientKnownRequestError &&
+          error.code === 'P2021'
+        ) return []
+        throw error
+      }),
   ])
   const movementHistory = [...person.movementsFrom, ...person.movementsTo].sort(
     (left, right) => right.createdAt.getTime() - left.createdAt.getTime(),
@@ -1141,6 +1151,7 @@ export async function getPerson(portalId: string, personId: string) {
   return {
     ...person,
     equipment: person.equipment.map(safeEquipment),
+    corporateLines: corporateLinesResult,
     extensions,
     movementHistory,
     audit,

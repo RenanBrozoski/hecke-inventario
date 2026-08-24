@@ -13,10 +13,12 @@ describe('inventory format helpers', () => {
     expect(equipmentLabel({ id: 'eq-2', patrimony: null, name: null })).toBe('#eq-2')
   })
 
-  it('mantém os seis status legados traduzidos', () => {
-    expect(Object.keys(EQUIPMENT_STATUS_LABELS)).toHaveLength(6)
+  it('mantém os status operacionais traduzidos, inclusive roubado', () => {
+    expect(Object.keys(EQUIPMENT_STATUS_LABELS)).toHaveLength(7)
     expect(EQUIPMENT_STATUS_LABELS.MAINTENANCE).toBe('Em manutenção')
+    expect(EQUIPMENT_STATUS_LABELS.LOST).toBe('Roubado / extraviado')
     expect(statusTone('BROKEN')).toBe('danger')
+    expect(statusTone('LOST')).toBe('danger')
     expect(statusTone('STOCK')).toBe('neutral')
   })
 })

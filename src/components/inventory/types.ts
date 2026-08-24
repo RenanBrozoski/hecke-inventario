@@ -1,5 +1,5 @@
 export type InventoryRole = 'ADMIN' | 'OPERATOR' | 'VIEWER'
-export type EquipmentStatus = 'ACTIVE' | 'STOCK' | 'MAINTENANCE' | 'BROKEN' | 'LOANED' | 'INACTIVE'
+export type EquipmentStatus = 'ACTIVE' | 'STOCK' | 'MAINTENANCE' | 'BROKEN' | 'LOANED' | 'LOST' | 'INACTIVE'
 export type PersonStatus = 'ACTIVE' | 'ON_LEAVE' | 'TERMINATED'
 export type EmploymentType = 'CLT' | 'PJ' | 'INTERN' | 'TEMPORARY' | 'OTHER'
 export type CorporateLineStatus = 'ACTIVE' | 'SUSPENDED' | 'CANCELLED' | 'AVAILABLE'
@@ -30,6 +30,7 @@ export interface InventoryFieldLookup {
   options: string[]
   required: boolean
   listVisible: boolean
+  active?: boolean
   sortOrder: number
 }
 

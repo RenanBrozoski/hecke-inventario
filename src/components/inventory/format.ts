@@ -6,6 +6,7 @@ export const EQUIPMENT_STATUS_LABELS: Record<EquipmentStatus, string> = {
   MAINTENANCE: 'Em manutenção',
   BROKEN: 'Quebrado',
   LOANED: 'Emprestado',
+  LOST: 'Roubado / extraviado',
   INACTIVE: 'Inativo / baixado',
 }
 
@@ -40,7 +41,7 @@ export function statusTone(
 ): 'success' | 'warning' | 'danger' | 'neutral' {
   if (status === 'ACTIVE') return 'success'
   if (status === 'MAINTENANCE' || status === 'LOANED' || status === 'ON_LEAVE') return 'warning'
-  if (status === 'BROKEN' || status === 'TERMINATED') return 'danger'
+  if (status === 'BROKEN' || status === 'LOST' || status === 'TERMINATED') return 'danger'
   return 'neutral'
 }
 

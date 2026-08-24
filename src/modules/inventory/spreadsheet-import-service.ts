@@ -30,7 +30,7 @@ function equipmentStatus(value: string | null): InventoryEquipmentStatus {
   if (['inativo', 'baixado', 'descartado'].includes(normalized)) return InventoryEquipmentStatus.INACTIVE
   if (['manutencao', 'em manutencao'].includes(normalized)) return InventoryEquipmentStatus.MAINTENANCE
   if (['estoque', 'disponivel'].includes(normalized)) return InventoryEquipmentStatus.STOCK
-  if (['extraviado', 'perdido'].includes(normalized)) return InventoryEquipmentStatus.BROKEN
+  if (['extraviado', 'perdido', 'roubado', 'furtado'].includes(normalized)) return InventoryEquipmentStatus.LOST
   return InventoryEquipmentStatus.ACTIVE
 }
 
