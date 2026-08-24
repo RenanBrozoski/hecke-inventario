@@ -1,4 +1,3 @@
-
 // Fase 0: fundação (JobExecution). Fase 1: integração com o Aplicativo Local do Bitrix24
 // (BitrixPortal/BitrixUser/BitrixDepartment/BitrixHandshake). Form/Workflow/Request nas fases seguintes.
 // Ver docs/01-planejamento.md para o modelo de dados completo planejado.
@@ -14,6 +13,7 @@ datasource db {
   // Conexão direta (sem pooler) — usada só por `prisma migrate`.
   directUrl = env("DIRECT_URL")
 }
+
 enum JobExecutionStatus {
   PENDING
   SUCCESS
@@ -103,32 +103,33 @@ model BitrixPortal {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users           BitrixUser[]
-  departments     BitrixDepartment[]
-  handshakes      BitrixHandshake[]
-  auditLogs       AuditLog[]
-
+  users       BitrixUser[]
+  departments BitrixDepartment[]
+  handshakes  BitrixHandshake[]
+  auditLogs   AuditLog[]
 
   // Domínio de Inventário. Todas as relações são escopadas pelo portal;
   // os espelhos BitrixUser/BitrixDepartment nunca são usados como substitutos
   // dos snapshots legados de pessoas e setores.
-  inventoryRoleAssignments    InventoryRoleAssignment[]
-  inventoryCategories         InventoryCategory[]
-  inventoryFields             InventoryField[]
-  inventoryDepartments        InventoryDepartment[]
-  inventoryLocations          InventoryLocation[]
-  inventoryPeople             InventoryPerson[]
-  inventoryEquipment          InventoryEquipment[]
-  inventoryMovements          InventoryMovement[]
-  inventoryExtensions         InventoryExtension[]
-  inventoryReceivings         InventoryReceiving[]
-  inventoryCustomModules      InventoryCustomModule[]
-  inventoryCustomModuleFields InventoryCustomModuleField[]
-  inventoryCustomRecords      InventoryCustomRecord[]
-  inventoryTerms              InventoryTerm[]
-  inventoryAttachments        InventoryAttachment[]
-  inventoryBlobCleanups       InventoryBlobCleanup[]
-  inventoryImportRuns         InventoryImportRun[]
+  inventoryRoleAssignments     InventoryRoleAssignment[]
+  inventoryCategories          InventoryCategory[]
+  inventoryFields              InventoryField[]
+  inventoryDepartments         InventoryDepartment[]
+  inventoryLocations           InventoryLocation[]
+  inventoryPeople              InventoryPerson[]
+  inventoryEquipment           InventoryEquipment[]
+  inventoryCorporateLines      InventoryCorporateLine[]
+  inventoryCorporateLineEvents InventoryCorporateLineHistory[]
+  inventoryMovements           InventoryMovement[]
+  inventoryExtensions          InventoryExtension[]
+  inventoryReceivings          InventoryReceiving[]
+  inventoryCustomModules       InventoryCustomModule[]
+  inventoryCustomModuleFields  InventoryCustomModuleField[]
+  inventoryCustomRecords       InventoryCustomRecord[]
+  inventoryTerms               InventoryTerm[]
+  inventoryAttachments         InventoryAttachment[]
+  inventoryBlobCleanups        InventoryBlobCleanup[]
+  inventoryImportRuns          InventoryImportRun[]
 
   @@map("bitrix_portals")
 }
@@ -215,14 +216,6 @@ model BitrixHandshake {
   @@map("bitrix_handshakes")
 }
 
-
-
-
-
-
-
-
-
 /// Log de auditoria transversal — nunca apagado. `metadata` guarda só um
 /// resumo seguro da operação (ex.: {versionNumber, fieldCount}), nunca o
 /// schema completo nem dados sensíveis.
@@ -241,28 +234,6 @@ model AuditLog {
   @@index([portalId, createdAt])
   @@map("audit_logs")
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 // ---------------------------------------------------------------------------
 // Inventário de ativos de TI
@@ -342,6 +313,13 @@ enum InventoryAttachmentEntityType {
   PERSON
   TERM
   CUSTOM_RECORD
+}
+
+enum InventoryCorporateLineStatus {
+  ACTIVE
+  SUSPENDED
+  CANCELLED
+  AVAILABLE
 }
 
 enum InventoryImportStatus {
@@ -507,11 +485,14 @@ model InventoryPerson {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  equipment          InventoryEquipment[]
-  movementsFrom      InventoryMovement[]  @relation("InventoryMovementFromPerson")
-  movementsTo        InventoryMovement[]  @relation("InventoryMovementToPerson")
-  termsAsOrigin      InventoryTerm[]      @relation("InventoryTermOriginPerson")
-  termsAsDestination InventoryTerm[]      @relation("InventoryTermDestinationPerson")
+  equipment               InventoryEquipment[]
+  movementsFrom           InventoryMovement[]             @relation("InventoryMovementFromPerson")
+  movementsTo             InventoryMovement[]             @relation("InventoryMovementToPerson")
+  termsAsOrigin           InventoryTerm[]                 @relation("InventoryTermOriginPerson")
+  termsAsDestination      InventoryTerm[]                 @relation("InventoryTermDestinationPerson")
+  corporateLines          InventoryCorporateLine[]        @relation("InventoryCorporateLineHolder")
+  corporateLineEventsFrom InventoryCorporateLineHistory[] @relation("InventoryCorporateLineHistoryFromHolder")
+  corporateLineEventsTo   InventoryCorporateLineHistory[] @relation("InventoryCorporateLineHistoryToHolder")
 
   @@unique([portalId, legacySource, legacyId])
   @@unique([portalId, bitrixUserId])
@@ -566,7 +547,10 @@ model InventoryEquipment {
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 
-  movements InventoryMovement[]
+  movements               InventoryMovement[]
+  corporateLines          InventoryCorporateLine[]        @relation("InventoryCorporateLineEquipment")
+  corporateLineEventsFrom InventoryCorporateLineHistory[] @relation("InventoryCorporateLineHistoryFromEquipment")
+  corporateLineEventsTo   InventoryCorporateLineHistory[] @relation("InventoryCorporateLineHistoryToEquipment")
 
   @@unique([portalId, patrimony])
   @@unique([portalId, legacySource, legacyId])
@@ -786,6 +770,86 @@ model InventoryTerm {
   @@index([portalId, archivedAt, createdAt])
   @@index([portalId, personId, createdAt])
   @@map("inventory_terms")
+}
+
+/// Linha corporativa independente do aparelho. A posse humana e o vínculo com
+/// aparelho/SIM podem existir separadamente para representar estoque, eSIM e
+/// cenários com mais de uma linha no mesmo smartphone.
+model InventoryCorporateLine {
+  id       String       @id @default(cuid())
+  portalId String
+  portal   BitrixPortal @relation(fields: [portalId], references: [id], onDelete: Restrict)
+
+  number           String
+  normalizedNumber String
+  carrier          String?
+  plan             String?
+  dataAllowance    String?
+  status           InventoryCorporateLineStatus @default(ACTIVE)
+
+  currentHolderId String?
+  currentHolder   InventoryPerson?    @relation("InventoryCorporateLineHolder", fields: [currentHolderId], references: [id], onDelete: Restrict)
+  equipmentId     String?
+  equipment       InventoryEquipment? @relation("InventoryCorporateLineEquipment", fields: [equipmentId], references: [id], onDelete: Restrict)
+  simSlot         String?
+
+  activatedAt DateTime? @db.Date
+  suspendedAt DateTime? @db.Date
+  cancelledAt DateTime? @db.Date
+  notes       String?
+  revision    Int       @default(1)
+  archivedAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  history InventoryCorporateLineHistory[]
+
+  @@unique([portalId, normalizedNumber])
+  @@index([portalId, archivedAt, status])
+  @@index([portalId, currentHolderId])
+  @@index([portalId, equipmentId])
+  @@map("inventory_corporate_lines")
+}
+
+/// Histórico append-only de cada criação, edição e vínculo de linha.
+model InventoryCorporateLineHistory {
+  id       String       @id @default(cuid())
+  portalId String
+  portal   BitrixPortal @relation(fields: [portalId], references: [id], onDelete: Restrict)
+
+  lineId String
+  line   InventoryCorporateLine @relation(fields: [lineId], references: [id], onDelete: Restrict)
+
+  action String
+  origin InventoryMovementOrigin @default(MANUAL)
+  reason String?
+
+  fromHolderId   String?
+  fromHolder     InventoryPerson? @relation("InventoryCorporateLineHistoryFromHolder", fields: [fromHolderId], references: [id], onDelete: Restrict)
+  fromHolderName String?
+  toHolderId     String?
+  toHolder       InventoryPerson? @relation("InventoryCorporateLineHistoryToHolder", fields: [toHolderId], references: [id], onDelete: Restrict)
+  toHolderName   String?
+
+  fromEquipmentId   String?
+  fromEquipment     InventoryEquipment? @relation("InventoryCorporateLineHistoryFromEquipment", fields: [fromEquipmentId], references: [id], onDelete: Restrict)
+  fromEquipmentName String?
+  toEquipmentId     String?
+  toEquipment       InventoryEquipment? @relation("InventoryCorporateLineHistoryToEquipment", fields: [toEquipmentId], references: [id], onDelete: Restrict)
+  toEquipmentName   String?
+
+  fromStatus  InventoryCorporateLineStatus?
+  toStatus    InventoryCorporateLineStatus?
+  fromSimSlot String?
+  toSimSlot   String?
+
+  performedByBitrixUserId String?
+  performedByName         String?
+  createdAt               DateTime @default(now())
+
+  @@index([portalId, lineId, createdAt])
+  @@map("inventory_corporate_line_history")
 }
 
 /// Metadados de arquivos no Vercel Blob. O alvo polimórfico é validado na

@@ -190,6 +190,64 @@ function PersonDetailContent({
           </div>
         )}
       </section>
+      <div className={styles.twoColumns}>
+        <section className={styles.card}>
+          <div className={styles.pageHeader} style={{ marginBottom: '0.75rem' }}>
+            <h2>Linhas corporativas</h2>
+            <Link href="/inventory/corporate-lines">Gerenciar linhas</Link>
+          </div>
+          {!person.corporateLines?.length ? (
+            <p className={styles.empty}>Nenhuma linha corporativa vinculada.</p>
+          ) : (
+            <div className={styles.tableWrap}>
+              <table>
+                <thead><tr><th>Número</th><th>Plano</th><th>Smartphone / SIM</th></tr></thead>
+                <tbody>
+                  {person.corporateLines.map((line) => (
+                    <tr key={line.id}>
+                      <td><Link href={`/inventory/corporate-lines/${line.id}`}>{line.number}</Link></td>
+                      <td>{[line.carrier, line.plan, line.dataAllowance].filter(Boolean).join(' · ') || '—'}</td>
+                      <td>{line.equipment ? <Link href={`/inventory/equipment/${line.equipment.id}`}>{equipmentLabel(line.equipment)}</Link> : 'Sem smartphone'}{line.simSlot ? ` · ${line.simSlot}` : ''}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+        <section className={styles.card}>
+          <h2>Ramais</h2>
+          {!person.extensions?.length ? <p className={styles.empty}>Nenhum ramal encontrado.</p> : (
+            <ul className={styles.timeline}>
+              {person.extensions.map((extension) => (
+                <li key={extension.id}><strong>{extension.number || 'Sem número'}</strong><div className={styles.timelineMeta}>{extension.type || 'Ramal'}{extension.notes ? ` · ${extension.notes}` : ''}</div></li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
+      <section className={styles.card} style={{ marginBottom: '1rem' }}>
+        <h2>Histórico de equipamentos e movimentações</h2>
+        {!person.movementHistory?.length ? <p className={styles.empty}>Nenhuma movimentação registrada.</p> : (
+          <ul className={styles.timeline}>
+            {person.movementHistory.map((movement) => (
+              <li key={movement.id}>
+                <strong>{movement.equipment ? <Link href={`/inventory/equipment/${movement.equipment.id}`}>{equipmentLabel(movement.equipment)}</Link> : 'Equipamento'}</strong>
+                <div>{movement.fromPersonName || 'Estoque'} → {movement.toPersonName || 'Estoque'}</div>
+                <div className={styles.timelineMeta}>{formatDateTime(movement.createdAt)}{movement.reason ? ` · ${movement.reason}` : ''}</div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+      <section className={styles.card} style={{ marginBottom: '1rem' }}>
+        <h2>Alterações relevantes</h2>
+        {!person.audit?.length ? <p className={styles.empty}>Nenhuma alteração registrada.</p> : (
+          <ul className={styles.timeline}>
+            {person.audit.map((event) => <li key={event.id}><strong>{event.action.replace(/^inventory_/, '').replaceAll('_', ' ')}</strong><div className={styles.timelineMeta}>{formatDateTime(event.createdAt)} · usuário Bitrix #{event.bitrixUserId}</div></li>)}
+          </ul>
+        )}
+      </section>
       {context.canEdit && <BulkTransferPanel person={person} onTransferred={load} />}
       <section className={styles.card}>
         <h2>Termos</h2>

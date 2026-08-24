@@ -2,6 +2,7 @@ export type InventoryRole = 'ADMIN' | 'OPERATOR' | 'VIEWER'
 export type EquipmentStatus = 'ACTIVE' | 'STOCK' | 'MAINTENANCE' | 'BROKEN' | 'LOANED' | 'INACTIVE'
 export type PersonStatus = 'ACTIVE' | 'ON_LEAVE' | 'TERMINATED'
 export type EmploymentType = 'CLT' | 'PJ' | 'INTERN' | 'TEMPORARY' | 'OTHER'
+export type CorporateLineStatus = 'ACTIVE' | 'SUSPENDED' | 'CANCELLED' | 'AVAILABLE'
 export type FieldType =
   'TEXT' | 'TEXTAREA' | 'NUMBER' | 'DATE' | 'SELECT' | 'BOOLEAN' | 'PASSWORD' | 'MAC' | 'IP'
 
@@ -137,7 +138,61 @@ export interface PersonDetail extends PersonSummary {
   updatedAt: string
   equipment?: EquipmentSummary[]
   movements?: InventoryMovement[]
+  movementHistory?: InventoryMovement[]
+  extensions?: Array<{ id: string; number?: string | null; type?: string | null; notes?: string | null }>
+  corporateLines?: CorporateLine[]
+  audit?: Array<{ id: string; action: string; metadata?: unknown; createdAt: string; bitrixUserId: string }>
   termsAsOrigin?: Array<{ id: string; type: string; createdAt: string; items: unknown }>
+}
+
+export interface CorporateLine {
+  id: string
+  number: string
+  normalizedNumber: string
+  carrier?: string | null
+  plan?: string | null
+  dataAllowance?: string | null
+  status: CorporateLineStatus
+  revision: number
+  currentHolder?: PersonLookup | null
+  equipment?: {
+    id: string
+    patrimony?: string | null
+    assetTag?: string | null
+    name?: string | null
+    category?: NamedLookup
+  } | null
+  simSlot?: string | null
+  activatedAt?: string | null
+  suspendedAt?: string | null
+  cancelledAt?: string | null
+  notes?: string | null
+  archivedAt?: string | null
+  createdAt: string
+  updatedAt: string
+  history?: Array<{
+    id: string
+    action: string
+    origin: string
+    fromHolderName?: string | null
+    toHolderName?: string | null
+    fromEquipmentName?: string | null
+    toEquipmentName?: string | null
+    fromStatus?: CorporateLineStatus | null
+    toStatus?: CorporateLineStatus | null
+    fromSimSlot?: string | null
+    toSimSlot?: string | null
+    performedByName?: string | null
+    createdAt: string
+  }>
+}
+
+export interface CorporateLineListResponse {
+  items: CorporateLine[]
+  total: number
+  page: number
+  pageSize: number
+  totalPages: number
 }
 
 export interface PeopleListResponse {

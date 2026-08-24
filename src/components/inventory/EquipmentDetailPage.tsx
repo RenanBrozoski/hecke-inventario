@@ -76,18 +76,19 @@ function EquipmentDetailContent({
   if (loading) return <p className={styles.loading}>Carregando equipamento…</p>
   if (error) return <p className="alert alert-error">{error}</p>
   if (!equipment || !lookups) return null
+
   const equipmentToArchive = equipment
   const tone = statusTone(equipment.status)
   const legacyInvalidEntries = Object.entries(equipment.legacyInvalidSpecs ?? {})
+  const isArchived = !!equipment.archivedAt
 
   async function archive() {
     if (
       !window.confirm(
         `Arquivar ${equipmentLabel(equipmentToArchive)}? O histórico será preservado.`,
       )
-    ) {
+    )
       return
-    }
     setArchiving(true)
     setError(null)
     try {
@@ -95,9 +96,8 @@ function EquipmentDetailContent({
         `/api/inventory/equipment/${equipmentToArchive.id}?revision=${equipmentToArchive.revision}`,
         { method: 'DELETE' },
       )
-      if (!response.ok) {
+      if (!response.ok)
         throw new Error(await readApiError(response, 'Não foi possível arquivar o equipamento.'))
-      }
       router.push('/inventory/equipment')
       router.refresh()
     } catch (cause) {
@@ -108,12 +108,20 @@ function EquipmentDetailContent({
 
   return (
     <div>
+      {/* Cabeçalho */}
       <header className={styles.pageHeader}>
         <div>
           <Link className="page-header__back" href="/inventory/equipment">
             ← Equipamentos
           </Link>
-          <h1>{equipmentLabel(equipment)}</h1>
+          <h1>
+            {equipmentLabel(equipment)}
+            {isArchived && (
+              <span className={`${styles.badge} ${styles.warning}`} style={{ marginLeft: '0.5rem', fontSize: '0.65rem', verticalAlign: 'middle' }}>
+                Arquivado
+              </span>
+            )}
+          </h1>
           <p className={styles.subtitle}>
             {equipment.category.name} ·{' '}
             <span className={`${styles.badge} ${tone === 'neutral' ? '' : styles[tone]}`}>
@@ -121,7 +129,7 @@ function EquipmentDetailContent({
             </span>
           </p>
         </div>
-        {context.canEdit && (
+        {context.canEdit && !isArchived && (
           <div className={styles.actions}>
             <Link href={`/inventory/equipment/${equipment.id}/edit`}>
               <button type="button">Editar</button>
@@ -133,133 +141,176 @@ function EquipmentDetailContent({
         )}
       </header>
 
-      <div className={styles.twoColumns}>
-        <section className={styles.card}>
-          <h2>Identificação e custódia</h2>
-          <dl className={styles.definitionList}>
-            <dt>Código / TAG</dt>
-            <dd>{equipment.patrimony || '—'}</dd>
-            <dt>Nº patrimônio</dt>
-            <dd>{equipment.assetTag || '—'}</dd>
-            <dt>Número de série</dt>
-            <dd>{equipment.serialNumber || '—'}</dd>
-            <dt>Responsável</dt>
-            <dd>
-              {equipment.currentHolder ? (
-                <Link href={`/inventory/people/${equipment.currentHolder.id}`}>
-                  {equipment.currentHolder.name}
-                </Link>
-              ) : (
-                'Estoque / sem responsável'
-              )}
-            </dd>
-            <dt>Setor</dt>
-            <dd>{equipment.department?.name || '—'}</dd>
-            <dt>Local / filial</dt>
-            <dd>{equipment.location?.name || '—'}</dd>
-            <dt>Detalhe do local</dt>
-            <dd>{equipment.locationDetail || '—'}</dd>
-            <dt>Nota fiscal</dt>
-            <dd>{equipment.invoiceNumber || '—'}</dd>
-          </dl>
-        </section>
-        <section className={styles.card}>
-          <h2>Datas</h2>
-          <dl className={styles.definitionList}>
-            <dt>Aquisição</dt>
-            <dd>{formatDate(equipment.acquiredAt)}</dd>
-            <dt>Recebimento</dt>
-            <dd>{formatDate(equipment.receivedAt)}</dd>
-            <dt>Entrega</dt>
-            <dd>{formatDate(equipment.deliveredAt)}</dd>
-            <dt>Fim da garantia</dt>
-            <dd>{formatDate(equipment.warrantyEndsAt)}</dd>
-            <dt>Cadastrado em</dt>
-            <dd>{formatDateTime(equipment.createdAt)}</dd>
-            <dt>Atualizado em</dt>
-            <dd>{formatDateTime(equipment.updatedAt)}</dd>
-          </dl>
-        </section>
-      </div>
+      {error && <p className="alert alert-error">{error}</p>}
 
-      {context.canEdit && (
-        <TransferPanel equipment={equipment} lookups={lookups} onTransferred={load} />
-      )}
-
-      <div className={styles.twoColumns} style={{ marginTop: '1rem' }}>
-        <section className={styles.card}>
-          <h2>Especificações</h2>
-          {category?.fields?.filter((field) => field.type !== 'PASSWORD').length ? (
+      {/* Seção 1: Identificação */}
+      <section className={styles.detailSection}>
+        <h2 className={styles.detailSectionTitle}>Identificação</h2>
+        <div className={styles.detailGrid}>
+          <div className={styles.card}>
             <dl className={styles.definitionList}>
-              {category.fields
-                .filter((field) => field.type !== 'PASSWORD')
-                .map((field) => (
-                  <div key={field.id} style={{ display: 'contents' }}>
-                    <dt>{field.label}</dt>
-                    <dd>{formatSpec(equipment.specs[field.key])}</dd>
-                  </div>
-                ))}
+              <dt>Código / TAG</dt>
+              <dd>{equipment.patrimony || '—'}</dd>
+              <dt>Nº patrimônio</dt>
+              <dd>{equipment.assetTag || '—'}</dd>
+              <dt>Número de série</dt>
+              <dd>{equipment.serialNumber || '—'}</dd>
+              <dt>Nota fiscal</dt>
+              <dd>{equipment.invoiceNumber || '—'}</dd>
+              <dt>Categoria</dt>
+              <dd>{equipment.category.name}</dd>
             </dl>
-          ) : (
-            <p className={styles.empty}>Nenhuma especificação configurada.</p>
-          )}
-          {category?.fields?.some((field) => field.type === 'PASSWORD') && (
-            <p className={styles.notice}>
-              Campos de senha foram excluídos da migração e não são exibidos.
-            </p>
-          )}
-        </section>
-        <section className={styles.card}>
-          <h2>Observações</h2>
-          <p style={{ whiteSpace: 'pre-wrap' }}>{equipment.notes || 'Nenhuma observação.'}</p>
-        </section>
-      </div>
+          </div>
+          <div className={styles.card}>
+            <h3 style={{ marginBottom: '0.75rem' }}>Datas</h3>
+            <dl className={styles.definitionList}>
+              <dt>Aquisição</dt>
+              <dd>{formatDate(equipment.acquiredAt)}</dd>
+              <dt>Recebimento</dt>
+              <dd>{formatDate(equipment.receivedAt)}</dd>
+              <dt>Entrega</dt>
+              <dd>{formatDate(equipment.deliveredAt)}</dd>
+              <dt>Fim da garantia</dt>
+              <dd>{formatDate(equipment.warrantyEndsAt)}</dd>
+              <dt>Cadastrado em</dt>
+              <dd>{formatDateTime(equipment.createdAt)}</dd>
+              <dt>Última alteração</dt>
+              <dd>{formatDateTime(equipment.updatedAt)}</dd>
+            </dl>
+          </div>
+        </div>
+      </section>
 
-      {legacyInvalidEntries.length > 0 && (
-        <section className={styles.card} style={{ marginTop: '1rem' }}>
-          <h2>Valores legados para revisão</h2>
-          <p className="alert alert-warning">
-            Estes valores foram preservados fora das especificações porque não atendem ao formato
-            atual de MAC/IP. Corrija-os na edição do equipamento ou deixe o campo vazio para
-            descartá-los.
-          </p>
-          <dl className={styles.definitionList}>
-            {legacyInvalidEntries.map(([key, value]) => (
-              <div key={key} style={{ display: 'contents' }}>
-                <dt>{category?.fields?.find((field) => field.key === key)?.label ?? key}</dt>
-                <dd>{formatSpec(value)}</dd>
-              </div>
-            ))}
-          </dl>
-        </section>
-      )}
-
-      <section className={styles.card} style={{ marginTop: '1rem' }}>
-        <h2>Histórico de movimentações</h2>
-        {!equipment.movements?.length ? (
-          <p className={styles.empty}>Nenhuma movimentação registrada para este equipamento.</p>
-        ) : (
-          <ul className={styles.timeline}>
-            {equipment.movements.map((movement) => (
-              <li key={movement.id}>
-                <div>
-                  {movement.fromPersonName || 'Estoque / sem responsável'} →{' '}
-                  {movement.toPersonName || 'Estoque / sem responsável'}
-                </div>
-                {(movement.fromDepartmentName || movement.toDepartmentName) && (
-                  <div className={styles.timelineMeta}>
-                    Setor: {movement.fromDepartmentName || '—'} → {movement.toDepartmentName || '—'}
-                  </div>
+      {/* Seção 2: Situação (custódia + localização) */}
+      <section className={styles.detailSection}>
+        <h2 className={styles.detailSectionTitle}>Situação</h2>
+        <div className={styles.detailGrid}>
+          <div className={styles.card}>
+            <h3 style={{ marginBottom: '0.75rem' }}>Custódia</h3>
+            <dl className={styles.definitionList}>
+              <dt>Situação</dt>
+              <dd>
+                <span className={`${styles.badge} ${tone === 'neutral' ? '' : styles[tone]}`}>
+                  {EQUIPMENT_STATUS_LABELS[equipment.status]}
+                </span>
+              </dd>
+              <dt>Responsável</dt>
+              <dd>
+                {equipment.currentHolder ? (
+                  <Link href={`/inventory/people/${equipment.currentHolder.id}`}>
+                    {equipment.currentHolder.name}
+                  </Link>
+                ) : (
+                  'Estoque / sem responsável'
                 )}
-                <div className={styles.timelineMeta}>
-                  {formatDate(movement.movedAt)}
-                  {movement.performedByName ? ` · ${movement.performedByName}` : ''}
-                  {movement.reason ? ` · ${movement.reason}` : ''}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
+              </dd>
+              <dt>Setor</dt>
+              <dd>{equipment.department?.name || '—'}</dd>
+              <dt>Local / filial</dt>
+              <dd>{equipment.location?.name || '—'}</dd>
+              <dt>Detalhe do local</dt>
+              <dd>{equipment.locationDetail || '—'}</dd>
+            </dl>
+          </div>
+          {context.canEdit && !isArchived && (
+            <div>
+              <TransferPanel equipment={equipment} lookups={lookups} onTransferred={load} />
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* Seção 3: Informações adicionais */}
+      <section className={styles.detailSection}>
+        <h2 className={styles.detailSectionTitle}>Informações adicionais</h2>
+        <div className={styles.detailGrid}>
+          <div className={styles.card}>
+            <h3 style={{ marginBottom: '0.75rem' }}>Especificações</h3>
+            {category?.fields?.filter((f) => f.type !== 'PASSWORD').length ? (
+              <dl className={styles.definitionList}>
+                {category.fields
+                  .filter((f) => f.type !== 'PASSWORD')
+                  .map((field) => (
+                    <div key={field.id} style={{ display: 'contents' }}>
+                      <dt>{field.label}</dt>
+                      <dd>{formatSpec(equipment.specs[field.key])}</dd>
+                    </div>
+                  ))}
+              </dl>
+            ) : (
+              <p className={styles.empty}>Nenhuma especificação configurada.</p>
+            )}
+            {category?.fields?.some((f) => f.type === 'PASSWORD') && (
+              <p className={styles.notice}>Campos de senha foram excluídos da migração.</p>
+            )}
+          </div>
+          <div className={styles.card}>
+            <h3 style={{ marginBottom: '0.75rem' }}>Observações</h3>
+            <p style={{ whiteSpace: 'pre-wrap' }}>{equipment.notes || 'Nenhuma observação.'}</p>
+
+            {legacyInvalidEntries.length > 0 && (
+              <>
+                <h3 className={styles.sectionTitle} style={{ marginBottom: '0.75rem' }}>
+                  Valores legados para revisão
+                </h3>
+                <p className="alert alert-info" style={{ fontSize: '0.8rem' }}>
+                  Valores em formato inválido do legado. Corrija na edição ou deixe em branco para descartar.
+                </p>
+                <dl className={styles.definitionList}>
+                  {legacyInvalidEntries.map(([key, value]) => (
+                    <div key={key} style={{ display: 'contents' }}>
+                      <dt>{category?.fields?.find((f) => f.key === key)?.label ?? key}</dt>
+                      <dd>{formatSpec(value)}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </>
+            )}
+          </div>
+        </div>
+      </section>
+
+      {/* Seção 4: Histórico */}
+      <section className={styles.detailSection}>
+        <h2 className={styles.detailSectionTitle}>Histórico</h2>
+        <div className={styles.card}>
+          {!equipment.movements?.length ? (
+            <p className={styles.empty}>Nenhuma movimentação registrada para este equipamento.</p>
+          ) : (
+            <ul className={styles.timeline}>
+              {equipment.movements.map((movement) => (
+                <li key={movement.id}>
+                  <div className={styles.timelineAction}>
+                    <span className={`${styles.badge} ${styles.timelineTypeBadge}`}>
+                      {movementOriginLabel(movement.origin)}
+                    </span>
+                    {movement.fromPersonName || movement.fromDepartmentName ? (
+                      <>
+                        {movement.fromPersonName || 'Sem responsável'} →{' '}
+                        {movement.toPersonName || 'Sem responsável'}
+                      </>
+                    ) : (
+                      <>Responsável: {movement.toPersonName || 'Sem responsável'}</>
+                    )}
+                  </div>
+                  {(movement.fromDepartmentName || movement.toDepartmentName) && (
+                    <div className={styles.timelineMeta}>
+                      Setor: {movement.fromDepartmentName || '—'} →{' '}
+                      {movement.toDepartmentName || '—'}
+                    </div>
+                  )}
+                  {movement.reason && (
+                    <div className={styles.timelineMeta}>Motivo: {movement.reason}</div>
+                  )}
+                  <div className={styles.timelineMeta}>
+                    {formatDate(movement.movedAt)}
+                    {movement.performedByName ? ` · ${movement.performedByName}` : ''}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </section>
 
       <InventoryAttachments
@@ -270,6 +321,19 @@ function EquipmentDetailContent({
       />
     </div>
   )
+}
+
+function movementOriginLabel(origin: string): string {
+  switch (origin) {
+    case 'INITIAL_REGISTRATION':
+      return 'Cadastro'
+    case 'BULK_TRANSFER':
+      return 'Transferência em lote'
+    case 'IMPORT':
+      return 'Importação'
+    default:
+      return 'Movimentação'
+  }
 }
 
 function TransferPanel({
@@ -341,18 +405,20 @@ function TransferPanel({
   }
 
   return (
-    <section className={styles.card}>
+    <div className={styles.card}>
       <div className={styles.pageHeader} style={{ marginBottom: open ? '1rem' : 0 }}>
         <div>
-          <h2 style={{ marginBottom: 0 }}>Transferência e situação</h2>
+          <h3 style={{ marginBottom: 0 }}>Transferência / situação</h3>
           {!open && (
-            <p className={styles.subtitle}>Altere responsável, setor, local ou situação.</p>
+            <p className={styles.subtitle} style={{ marginTop: '0.25rem' }}>
+              Altere responsável, setor, local ou situação.
+            </p>
           )}
         </div>
         <button
           type="button"
           className={open ? '' : 'primary'}
-          onClick={() => setOpen((value) => !value)}
+          onClick={() => setOpen((v) => !v)}
         >
           {open ? 'Fechar' : 'Transferir / atualizar'}
         </button>
@@ -365,8 +431,8 @@ function TransferPanel({
       {open && (
         <form onSubmit={submit}>
           <div className={styles.formGrid}>
-            <Field label="Novo responsável">
-              <select value={personId} onChange={(event) => setPersonId(event.target.value)}>
+            <Field label="Responsável">
+              <select value={personId} onChange={(e) => setPersonId(e.target.value)}>
                 <option value="">Estoque / sem responsável</option>
                 {lookups.people.map((item) => (
                   <option key={item.id} value={item.id}>
@@ -375,11 +441,8 @@ function TransferPanel({
                 ))}
               </select>
             </Field>
-            <Field label="Novo setor">
-              <select
-                value={departmentId}
-                onChange={(event) => setDepartmentId(event.target.value)}
-              >
+            <Field label="Setor">
+              <select value={departmentId} onChange={(e) => setDepartmentId(e.target.value)}>
                 <option value="">Sem setor</option>
                 {lookups.departments.map((item) => (
                   <option key={item.id} value={item.id}>
@@ -389,11 +452,10 @@ function TransferPanel({
               </select>
             </Field>
             <p className={`${styles.notice} ${styles.spanTwo}`}>
-              Responsável e setor são independentes. Confirme ambos antes de registrar a
-              movimentação.
+              Responsável e setor são independentes. Confirme ambos antes de registrar.
             </p>
             <Field label="Local / filial">
-              <select value={locationId} onChange={(event) => setLocationId(event.target.value)}>
+              <select value={locationId} onChange={(e) => setLocationId(e.target.value)}>
                 <option value="">Sem local</option>
                 {lookups.locations.map((item) => (
                   <option key={item.id} value={item.id}>
@@ -405,11 +467,11 @@ function TransferPanel({
             <Field label="Situação">
               <select
                 value={status}
-                onChange={(event) => setStatus(event.target.value as EquipmentDetail['status'])}
+                onChange={(e) => setStatus(e.target.value as EquipmentDetail['status'])}
               >
-                {Object.entries(EQUIPMENT_STATUS_LABELS).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
+                {Object.entries(EQUIPMENT_STATUS_LABELS).map(([v, l]) => (
+                  <option key={v} value={v}>
+                    {l}
                   </option>
                 ))}
               </select>
@@ -418,16 +480,12 @@ function TransferPanel({
               <input
                 type="date"
                 value={movedAt}
-                onChange={(event) => setMovedAt(event.target.value)}
+                onChange={(e) => setMovedAt(e.target.value)}
                 required
               />
             </Field>
             <Field label="Motivo">
-              <input
-                value={reason}
-                onChange={(event) => setReason(event.target.value)}
-                maxLength={1000}
-              />
+              <input value={reason} onChange={(e) => setReason(e.target.value)} maxLength={1000} />
             </Field>
           </div>
           <div className={styles.actions} style={{ marginTop: '1rem' }}>
@@ -437,7 +495,7 @@ function TransferPanel({
           </div>
         </form>
       )}
-    </section>
+    </div>
   )
 }
 

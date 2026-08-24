@@ -15,11 +15,13 @@ const NAV_ITEMS = [
   { href: '/inventory', label: 'Visão geral' },
   { href: '/inventory/equipment', label: 'Equipamentos' },
   { href: '/inventory/people', label: 'Colaboradores' },
+  { href: '/inventory/corporate-lines', label: 'Linhas corporativas' },
   { href: '/inventory/extensions', label: 'Ramais' },
   { href: '/inventory/receivings', label: 'Recebimentos' },
   { href: '/inventory/terms', label: 'Termos' },
   { href: '/inventory/reports', label: 'Relatórios' },
   { href: '/inventory/custom', label: 'Personalizados' },
+  { href: '/inventory/imports', label: 'Importar planilha', adminOnly: true },
 ]
 
 export function InventoryGate({ children }: InventoryGateProps) {
@@ -69,7 +71,7 @@ export function InventoryGate({ children }: InventoryGateProps) {
     <div className={styles.module}>
       <div className={styles.moduleBar}>
         <nav className={styles.moduleNav} aria-label="Seções do inventário">
-          {NAV_ITEMS.map((item) => (
+          {NAV_ITEMS.filter((item) => !item.adminOnly || context.canAdmin).map((item) => (
             <Link key={item.href} href={item.href}>
               {item.label}
             </Link>

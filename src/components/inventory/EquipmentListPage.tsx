@@ -1,17 +1,30 @@
 'use client'
 
 import Link from 'next/link'
-import { useSearchParams } from 'next/navigation'
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSession } from '@/src/components/session/SessionProvider'
 import { EQUIPMENT_STATUS_LABELS, equipmentLabel, readApiError, statusTone } from './format'
 import { InventoryGate } from './InventoryGate'
 import type {
   EquipmentListResponse,
+  EquipmentSummary,
   InventoryContextResponse,
   InventoryLookupsResponse,
 } from './types'
 import styles from './inventory.module.css'
+
+type SortField =
+  | 'updatedAt'
+  | 'createdAt'
+  | 'patrimony'
+  | 'name'
+  | 'category'
+  | 'status'
+  | 'holder'
+  | 'department'
+  | 'location'
+type SortDir = 'asc' | 'desc'
 
 interface Filters {
   q: string
@@ -19,51 +32,99 @@ interface Filters {
   categoryId: string
   departmentId: string
   locationId: string
+  archived: string
+  sort: SortField
+  dir: SortDir
+  pageSize: string
 }
 
-const EMPTY_FILTERS: Filters = {
+const DEFAULT_FILTERS: Filters = {
   q: '',
   status: '',
   categoryId: '',
   departmentId: '',
   locationId: '',
+  archived: 'exclude',
+  sort: 'updatedAt',
+  dir: 'desc',
+  pageSize: '25',
 }
+
+const PAGE_SIZE_OPTIONS = ['25', '50', '100']
 
 export function EquipmentListPage() {
   return <InventoryGate>{(context) => <EquipmentListContent context={context} />}</InventoryGate>
 }
 
+function filtersFromParams(params: URLSearchParams): Filters {
+  return {
+    q: params.get('q') ?? '',
+    status: params.get('status') ?? '',
+    categoryId: params.get('categoryId') ?? '',
+    departmentId: params.get('departmentId') ?? '',
+    locationId: params.get('locationId') ?? '',
+    archived: params.get('archived') ?? 'exclude',
+    sort: (params.get('sort') as SortField) ?? 'updatedAt',
+    dir: (params.get('dir') as SortDir) ?? 'desc',
+    pageSize: params.get('pageSize') ?? '25',
+  }
+}
+
+function filtersToParams(filters: Filters, page: number): URLSearchParams {
+  const params = new URLSearchParams()
+  if (filters.q) params.set('q', filters.q)
+  if (filters.status) params.set('status', filters.status)
+  if (filters.categoryId) params.set('categoryId', filters.categoryId)
+  if (filters.departmentId) params.set('departmentId', filters.departmentId)
+  if (filters.locationId) params.set('locationId', filters.locationId)
+  if (filters.archived !== 'exclude') params.set('archived', filters.archived)
+  if (filters.sort !== 'updatedAt') params.set('sort', filters.sort)
+  if (filters.dir !== 'desc') params.set('dir', filters.dir)
+  if (filters.pageSize !== '25') params.set('pageSize', filters.pageSize)
+  if (page > 1) params.set('page', String(page))
+  return params
+}
+
 function EquipmentListContent({ context }: { context: InventoryContextResponse }) {
   const searchParams = useSearchParams()
+  const router = useRouter()
   const { authorizedFetch } = useSession()
-  const [draft, setDraft] = useState<Filters>(() => ({
-    ...EMPTY_FILTERS,
-    status: searchParams.get('status') ?? '',
-  }))
-  const [filters, setFilters] = useState<Filters>(() => ({
-    ...EMPTY_FILTERS,
-    status: searchParams.get('status') ?? '',
-  }))
-  const [page, setPage] = useState(1)
+
+  const [filters, setFilters] = useState<Filters>(() => filtersFromParams(searchParams))
+  const [draft, setDraft] = useState<Filters>(() => filtersFromParams(searchParams))
+  const [page, setPage] = useState(() => Number(searchParams.get('page') ?? '1'))
   const [data, setData] = useState<EquipmentListResponse | null>(null)
   const [lookups, setLookups] = useState<InventoryLookupsResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+
+  const lookupsLoaded = useRef(false)
 
   const loadLookups = useCallback(async () => {
+    if (lookupsLoaded.current) return
     const response = await authorizedFetch('/api/inventory/lookups')
     if (!response.ok)
       throw new Error(await readApiError(response, 'Não foi possível carregar os filtros.'))
     setLookups((await response.json()) as InventoryLookupsResponse)
+    lookupsLoaded.current = true
   }, [authorizedFetch])
 
   const loadEquipment = useCallback(async () => {
-    const params = new URLSearchParams({ page: String(page), pageSize: '25' })
-    for (const [key, value] of Object.entries(filters)) if (value) params.set(key, value)
+    const params = new URLSearchParams({ page: String(page), pageSize: filters.pageSize })
+    if (filters.q) params.set('q', filters.q)
+    if (filters.status) params.set('status', filters.status)
+    if (filters.categoryId) params.set('categoryId', filters.categoryId)
+    if (filters.departmentId) params.set('departmentId', filters.departmentId)
+    if (filters.locationId) params.set('locationId', filters.locationId)
+    if (filters.archived !== 'exclude') params.set('archived', filters.archived)
+    params.set('sort', filters.sort)
+    params.set('dir', filters.dir)
     const response = await authorizedFetch(`/api/inventory/equipment?${params}`)
     if (!response.ok)
       throw new Error(await readApiError(response, 'Não foi possível carregar os equipamentos.'))
     setData((await response.json()) as EquipmentListResponse)
+    setSelectedIds(new Set())
   }, [authorizedFetch, filters, page])
 
   const load = useCallback(async () => {
@@ -82,20 +143,75 @@ function EquipmentListContent({ context }: { context: InventoryContextResponse }
     void load()
   }, [load])
 
-  function applyFilters(event: FormEvent) {
-    event.preventDefault()
+  // Keep URL in sync with current state
+  useEffect(() => {
+    const params = filtersToParams(filters, page)
+    const qs = params.toString()
+    router.replace(qs ? `?${qs}` : '/inventory/equipment', { scroll: false })
+  }, [filters, page, router])
+
+  function applyFilters() {
     setPage(1)
     setFilters(draft)
   }
 
   function clearFilters() {
-    setDraft(EMPTY_FILTERS)
-    setFilters(EMPTY_FILTERS)
+    const clean = { ...DEFAULT_FILTERS }
+    setDraft(clean)
+    setFilters(clean)
     setPage(1)
   }
 
+  function handleSort(field: SortField) {
+    const nextDir: SortDir =
+      filters.sort === field && filters.dir === 'desc' ? 'asc' : 'desc'
+    const next = { ...filters, sort: field, dir: nextDir }
+    setFilters(next)
+    setDraft(next)
+    setPage(1)
+  }
+
+  function toggleSelect(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function toggleSelectAll() {
+    if (!data) return
+    if (selectedIds.size === data.items.length) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(data.items.map((item) => item.id)))
+    }
+  }
+
   const totalPages =
-    data?.totalPages ?? Math.max(1, Math.ceil((data?.total ?? 0) / (data?.pageSize ?? 25)))
+    data?.totalPages ?? Math.max(1, Math.ceil((data?.total ?? 0) / Number(filters.pageSize)))
+
+  const hasFilters =
+    filters.q ||
+    filters.status ||
+    filters.categoryId ||
+    filters.departmentId ||
+    filters.locationId ||
+    filters.archived !== 'exclude'
+
+  // Build CSV export URL with current filters
+  function exportUrl() {
+    const params = new URLSearchParams()
+    if (filters.status) params.set('status', filters.status)
+    if (filters.categoryId) params.set('categoryId', filters.categoryId)
+    if (filters.departmentId) params.set('departmentId', filters.departmentId)
+    if (filters.locationId) params.set('locationId', filters.locationId)
+    if (filters.q) params.set('q', filters.q)
+    if (filters.archived !== 'exclude') params.set('archived', filters.archived)
+    const qs = params.toString()
+    return `/api/inventory/reports/equipment.csv${qs ? `?${qs}` : ''}`
+  }
 
   return (
     <div>
@@ -103,87 +219,132 @@ function EquipmentListContent({ context }: { context: InventoryContextResponse }
         <div>
           <h1>Equipamentos</h1>
           <p className={styles.subtitle}>
-            {data ? `${data.total} item(ns) encontrado(s)` : 'Catálogo de ativos de TI'}
+            {data
+              ? `${data.total} equipamento(s)${hasFilters ? ' com os filtros aplicados' : ''}`
+              : 'Inventário de ativos de TI'}
           </p>
         </div>
-        {context.canEdit && (
-          <Link href="/inventory/equipment/new">
-            <button type="button" className="primary">
-              + Novo equipamento
-            </button>
-          </Link>
-        )}
+        <div className={styles.actions}>
+          <a href={exportUrl()} target="_blank" rel="noopener noreferrer">
+            <button type="button">↓ Exportar CSV</button>
+          </a>
+          {context.canEdit && (
+            <Link href="/inventory/equipment/new">
+              <button type="button" className="primary">
+                + Novo equipamento
+              </button>
+            </Link>
+          )}
+        </div>
       </header>
 
-      <form className={styles.filters} onSubmit={applyFilters}>
-        <div className={styles.field}>
-          <label htmlFor="equipment-q">Buscar</label>
-          <input
-            id="equipment-q"
-            value={draft.q}
-            onChange={(event) => setDraft({ ...draft, q: event.target.value })}
-            placeholder="Código, patrimônio, nome ou série"
-          />
+      {/* Filtros */}
+      <div className={styles.filterBar}>
+        <div className={styles.filterBarFields}>
+          <div className={styles.field}>
+            <label htmlFor="eq-q">Buscar</label>
+            <input
+              id="eq-q"
+              value={draft.q}
+              onChange={(e) => setDraft({ ...draft, q: e.target.value })}
+              onKeyDown={(e) => e.key === 'Enter' && applyFilters()}
+              placeholder="Patrimônio, TAG, nome, série, responsável…"
+            />
+          </div>
+          <div className={styles.field}>
+            <label htmlFor="eq-status">Situação</label>
+            <select
+              id="eq-status"
+              value={draft.status}
+              onChange={(e) => setDraft({ ...draft, status: e.target.value })}
+            >
+              <option value="">Todas</option>
+              {Object.entries(EQUIPMENT_STATUS_LABELS).map(([v, l]) => (
+                <option key={v} value={v}>
+                  {l}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className={styles.field}>
+            <label htmlFor="eq-category">Categoria</label>
+            <select
+              id="eq-category"
+              value={draft.categoryId}
+              onChange={(e) => setDraft({ ...draft, categoryId: e.target.value })}
+            >
+              <option value="">Todas</option>
+              {lookups?.categories.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className={styles.field}>
+            <label htmlFor="eq-dept">Setor</label>
+            <select
+              id="eq-dept"
+              value={draft.departmentId}
+              onChange={(e) => setDraft({ ...draft, departmentId: e.target.value })}
+            >
+              <option value="">Todos</option>
+              {lookups?.departments.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className={styles.field}>
+            <label htmlFor="eq-location">Local</label>
+            <select
+              id="eq-location"
+              value={draft.locationId}
+              onChange={(e) => setDraft({ ...draft, locationId: e.target.value })}
+            >
+              <option value="">Todos</option>
+              {lookups?.locations.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className={styles.field}>
+            <label htmlFor="eq-archived">Arquivados</label>
+            <select
+              id="eq-archived"
+              value={draft.archived}
+              onChange={(e) => setDraft({ ...draft, archived: e.target.value })}
+            >
+              <option value="exclude">Ocultar</option>
+              <option value="include">Incluir</option>
+              <option value="only">Somente arquivados</option>
+            </select>
+          </div>
         </div>
-        <div className={styles.field}>
-          <label htmlFor="equipment-status">Situação</label>
-          <select
-            id="equipment-status"
-            value={draft.status}
-            onChange={(event) => setDraft({ ...draft, status: event.target.value })}
-          >
-            <option value="">Todas</option>
-            {Object.entries(EQUIPMENT_STATUS_LABELS).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className={styles.field}>
-          <label htmlFor="equipment-category">Categoria</label>
-          <select
-            id="equipment-category"
-            value={draft.categoryId}
-            onChange={(event) => setDraft({ ...draft, categoryId: event.target.value })}
-          >
-            <option value="">Todas</option>
-            {lookups?.categories.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className={styles.field}>
-          <label htmlFor="equipment-department">Setor</label>
-          <select
-            id="equipment-department"
-            value={draft.departmentId}
-            onChange={(event) => setDraft({ ...draft, departmentId: event.target.value })}
-          >
-            <option value="">Todos</option>
-            {lookups?.departments.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className={styles.actions}>
-          <button type="submit" className="primary">
+        <div className={styles.filterBarActions}>
+          <button type="button" className="primary" onClick={applyFilters}>
             Filtrar
           </button>
-          <button type="button" onClick={clearFilters}>
-            Limpar
-          </button>
+          {hasFilters && (
+            <button type="button" onClick={clearFilters}>
+              Limpar
+            </button>
+          )}
         </div>
-      </form>
+      </div>
 
       {error && <p className="alert alert-error">{error}</p>}
       {loading && <p className={styles.loading}>Carregando equipamentos…</p>}
+
       {!loading && data && data.items.length === 0 && (
-        <p className={`${styles.card} ${styles.empty}`}>Nenhum equipamento encontrado.</p>
+        <p className={`${styles.card} ${styles.empty}`}>
+          {hasFilters
+            ? 'Nenhum equipamento encontrado com esses filtros.'
+            : 'Nenhum equipamento cadastrado ainda.'}
+        </p>
       )}
 
       {!loading && data && data.items.length > 0 && (
@@ -192,69 +353,183 @@ function EquipmentListContent({ context }: { context: InventoryContextResponse }
             <table>
               <thead>
                 <tr>
-                  <th>Identificação</th>
-                  <th>Categoria</th>
-                  <th>Situação</th>
-                  <th>Responsável</th>
-                  <th>Setor</th>
-                  <th>Local</th>
-                  <th></th>
+                  <th style={{ width: 32 }}>
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.size === data.items.length && data.items.length > 0}
+                      onChange={toggleSelectAll}
+                      title="Selecionar todos"
+                    />
+                  </th>
+                  <SortHeader field="patrimony" current={filters} onSort={handleSort}>
+                    Identificação
+                  </SortHeader>
+                  <SortHeader field="category" current={filters} onSort={handleSort}>
+                    Categoria
+                  </SortHeader>
+                  <SortHeader field="status" current={filters} onSort={handleSort}>
+                    Situação
+                  </SortHeader>
+                  <SortHeader field="holder" current={filters} onSort={handleSort}>
+                    Responsável
+                  </SortHeader>
+                  <SortHeader field="department" current={filters} onSort={handleSort}>
+                    Setor
+                  </SortHeader>
+                  <SortHeader field="location" current={filters} onSort={handleSort}>
+                    Local
+                  </SortHeader>
+                  <th style={{ width: context.canEdit ? 120 : 60 }}></th>
                 </tr>
               </thead>
               <tbody>
-                {data.items.map((item) => {
-                  const tone = statusTone(item.status)
-                  return (
-                    <tr key={item.id}>
-                      <td>
-                        <Link href={`/inventory/equipment/${item.id}`}>{equipmentLabel(item)}</Link>
-                        {item.assetTag && (
-                          <div className={styles.timelineMeta}>Patrimônio: {item.assetTag}</div>
-                        )}
-                      </td>
-                      <td>{item.category.name}</td>
-                      <td>
-                        <span
-                          className={`${styles.badge} ${tone === 'neutral' ? '' : styles[tone]}`}
-                        >
-                          {EQUIPMENT_STATUS_LABELS[item.status]}
-                        </span>
-                      </td>
-                      <td>{item.currentHolder?.name ?? '—'}</td>
-                      <td>{item.department?.name ?? '—'}</td>
-                      <td>{item.location?.name ?? '—'}</td>
-                      <td>
-                        <Link href={`/inventory/equipment/${item.id}`}>Abrir</Link>
-                      </td>
-                    </tr>
-                  )
-                })}
+                {data.items.map((item) => (
+                  <EquipmentRow
+                    key={item.id}
+                    item={item}
+                    canEdit={context.canEdit}
+                    selected={selectedIds.has(item.id)}
+                    onToggle={toggleSelect}
+                  />
+                ))}
               </tbody>
             </table>
           </div>
-          <div className={styles.pagination}>
-            <span>
-              Página {data.page} de {totalPages} · {data.total} registro(s)
-            </span>
+
+          <div className={styles.tableFooter}>
+            <div className={styles.tableFooterLeft}>
+              <span className={styles.tableCount}>
+                {data.total} registro(s) · página {data.page} de {totalPages}
+                {selectedIds.size > 0 && ` · ${selectedIds.size} selecionado(s)`}
+              </span>
+              <label className={styles.pageSizeLabel}>
+                Exibir:
+                <select
+                  value={filters.pageSize}
+                  onChange={(e) => {
+                    const next = { ...filters, pageSize: e.target.value }
+                    setFilters(next)
+                    setDraft(next)
+                    setPage(1)
+                  }}
+                >
+                  {PAGE_SIZE_OPTIONS.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
             <div className={styles.paginationActions}>
               <button
                 type="button"
                 disabled={page <= 1}
-                onClick={() => setPage((value) => Math.max(1, value - 1))}
+                onClick={() => setPage((v) => Math.max(1, v - 1))}
               >
-                Anterior
+                ← Anterior
               </button>
               <button
                 type="button"
                 disabled={page >= totalPages}
-                onClick={() => setPage((value) => value + 1)}
+                onClick={() => setPage((v) => v + 1)}
               >
-                Próxima
+                Próxima →
               </button>
             </div>
           </div>
         </>
       )}
     </div>
+  )
+}
+
+function SortHeader({
+  field,
+  current,
+  onSort,
+  children,
+}: {
+  field: SortField
+  current: Filters
+  onSort: (field: SortField) => void
+  children: React.ReactNode
+}) {
+  const active = current.sort === field
+  const icon = active ? (current.dir === 'asc' ? ' ▲' : ' ▼') : ''
+  return (
+    <th
+      className={`${styles.sortableHeader} ${active ? styles.sortActive : ''}`}
+      onClick={() => onSort(field)}
+      title={`Ordenar por ${String(children)}`}
+    >
+      {children}
+      <span className={styles.sortIcon}>{icon || ' ⇅'}</span>
+    </th>
+  )
+}
+
+function EquipmentRow({
+  item,
+  canEdit,
+  selected,
+  onToggle,
+}: {
+  item: EquipmentSummary
+  canEdit: boolean
+  selected: boolean
+  onToggle: (id: string) => void
+}) {
+  const tone = statusTone(item.status)
+  const label = equipmentLabel(item)
+  const isArchived = !!item.archivedAt
+
+  return (
+    <tr className={isArchived ? styles.rowArchived : ''}>
+      <td>
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={() => onToggle(item.id)}
+          title="Selecionar"
+        />
+      </td>
+      <td>
+        <Link href={`/inventory/equipment/${item.id}`} className={styles.equipmentLink}>
+          {label}
+        </Link>
+        <div className={styles.timelineMeta}>
+          {[item.assetTag && `Patrim. ${item.assetTag}`, item.serialNumber && `S/N ${item.serialNumber}`]
+            .filter(Boolean)
+            .join(' · ') || null}
+        </div>
+        {isArchived && (
+          <span className={`${styles.badge} ${styles.archivedBadge}`}>Arquivado</span>
+        )}
+      </td>
+      <td>{item.category.name}</td>
+      <td>
+        <span className={`${styles.badge} ${tone === 'neutral' ? '' : styles[tone]}`}>
+          {EQUIPMENT_STATUS_LABELS[item.status]}
+        </span>
+      </td>
+      <td>
+        {item.currentHolder ? (
+          <Link href={`/inventory/people/${item.currentHolder.id}`}>{item.currentHolder.name}</Link>
+        ) : (
+          <span className={styles.muted}>—</span>
+        )}
+      </td>
+      <td>{item.department?.name ?? <span className={styles.muted}>—</span>}</td>
+      <td>{item.location?.name ?? <span className={styles.muted}>—</span>}</td>
+      <td>
+        <div className={styles.rowActions}>
+          <Link href={`/inventory/equipment/${item.id}`}>Ver</Link>
+          {canEdit && !isArchived && (
+            <Link href={`/inventory/equipment/${item.id}/edit`}>Editar</Link>
+          )}
+        </div>
+      </td>
+    </tr>
   )
 }

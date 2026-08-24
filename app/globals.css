@@ -284,8 +284,13 @@ tbody tr:hover {
 }
 .app-shell__main {
   flex: 1;
-  padding: var(--space-6);
+  padding: var(--space-5) var(--space-6);
   max-width: 1100px;
+}
+/* Módulo de Inventário: usa a largura total — tabelas com muitas colunas e
+   filtros ficam espremidas em 1100px; desktop corporativo tem telas largas. */
+.app-shell__main:has(.module) {
+  max-width: none;
 }
 /* O editor de Aplicativo (aba Processo em especial, canvas BPMN) precisa de
    toda a largura disponível — a leitura confortável de 1100px que serve bem

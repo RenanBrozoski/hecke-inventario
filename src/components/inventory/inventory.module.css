@@ -138,6 +138,134 @@
   background: var(--color-bg-elevated);
 }
 
+/* Nova barra de filtros (EquipmentListPage) */
+.filterBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.65rem;
+  margin-bottom: 1rem;
+  padding: 0.9rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-elevated);
+}
+
+.filterBarFields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.filterBarFields .field {
+  min-width: 140px;
+  flex: 1;
+}
+
+.filterBarActions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-end;
+  flex: 0 0 auto;
+}
+
+/* Table footer com paginação + contagem + pageSize */
+.tableFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.tableFooterLeft {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  color: var(--color-text-muted);
+}
+
+.tableCount {
+  font-size: 0.85rem;
+}
+
+.pageSizeLabel {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+}
+
+.pageSizeLabel select {
+  padding: 0.2rem 0.4rem;
+  font-size: 0.82rem;
+}
+
+/* Sortable column headers */
+.sortableHeader {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.sortableHeader:hover {
+  color: var(--color-primary);
+}
+
+.sortActive {
+  color: var(--color-primary);
+}
+
+.sortIcon {
+  font-size: 0.65rem;
+  margin-left: 0.2rem;
+  opacity: 0.6;
+}
+
+.sortActive .sortIcon {
+  opacity: 1;
+}
+
+/* Row quick actions */
+.rowActions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.rowActions a {
+  font-size: 0.8rem;
+  color: var(--color-primary);
+}
+
+/* Equipment name link in table */
+.equipmentLink {
+  font-weight: 500;
+}
+
+/* Archived row */
+.rowArchived {
+  opacity: 0.65;
+}
+
+.archivedBadge {
+  background: var(--color-bg-subtle);
+  color: var(--color-text-muted);
+  font-size: 0.65rem;
+  margin-left: 0.3rem;
+}
+
+/* Muted dash */
+.muted {
+  color: var(--color-text-muted);
+}
+
 .field {
   min-width: 0;
 }

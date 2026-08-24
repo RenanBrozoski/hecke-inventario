@@ -1,5 +1,6 @@
 import {
   InventoryEmploymentType,
+  InventoryCorporateLineStatus,
   InventoryEquipmentStatus,
   InventoryFieldType,
   InventoryPersonStatus,
@@ -36,6 +37,20 @@ export const equipmentListQuerySchema = paginationQuerySchema.extend({
   departmentId: id.optional(),
   locationId: id.optional(),
   archived: z.enum(['exclude', 'include', 'only']).default('exclude'),
+  sort: z
+    .enum([
+      'updatedAt',
+      'createdAt',
+      'patrimony',
+      'name',
+      'category',
+      'status',
+      'holder',
+      'department',
+      'location',
+    ])
+    .default('updatedAt'),
+  dir: z.enum(['asc', 'desc']).default('desc'),
 })
 
 const equipmentMutableShape = {
@@ -140,6 +155,44 @@ export const peopleListQuerySchema = paginationQuerySchema.extend({
   status: z.nativeEnum(InventoryPersonStatus).optional(),
   departmentId: id.optional(),
   archived: z.enum(['exclude', 'include', 'only']).default('exclude'),
+})
+
+const corporateLineMutableShape = {
+  number: z.string().trim().min(3).max(50).optional(),
+  carrier: optionalNullableText(100),
+  plan: optionalNullableText(200),
+  dataAllowance: optionalNullableText(100),
+  status: z.nativeEnum(InventoryCorporateLineStatus).optional(),
+  currentHolderId: z.union([id, z.null()]).optional(),
+  equipmentId: z.union([id, z.null()]).optional(),
+  simSlot: optionalNullableText(100),
+  activatedAt: z.union([dateOnlyString, z.null()]).optional(),
+  suspendedAt: z.union([dateOnlyString, z.null()]).optional(),
+  cancelledAt: z.union([dateOnlyString, z.null()]).optional(),
+  notes: optionalNullableText(5000),
+}
+
+export const corporateLineListQuerySchema = paginationQuerySchema.extend({
+  q: z.string().trim().max(200).optional(),
+  status: z.nativeEnum(InventoryCorporateLineStatus).optional(),
+  holderId: id.optional(),
+  equipmentId: id.optional(),
+  archived: z.enum(['exclude', 'include', 'only']).default('exclude'),
+})
+
+export const createCorporateLineSchema = z
+  .object({ ...corporateLineMutableShape, number: z.string().trim().min(3).max(50) })
+  .strict()
+
+export const updateCorporateLineSchema = z
+  .object({ revision: z.number().int().min(1), ...corporateLineMutableShape })
+  .strict()
+  .refine((body) => Object.keys(body).some((key) => key !== 'revision'), {
+    message: 'Informe ao menos um campo para atualizar.',
+  })
+
+export const corporateLineDeleteQuerySchema = z.object({
+  revision: z.coerce.number().int().min(1),
 })
 
 const personMutableShape = {
@@ -375,3 +428,5 @@ export type TransferEquipmentInput = z.infer<typeof transferEquipmentSchema>
 export type BulkTransferInput = z.infer<typeof bulkTransferSchema>
 export type CreatePersonInput = z.infer<typeof createPersonSchema>
 export type UpdatePersonInput = z.infer<typeof updatePersonSchema>
+export type CreateCorporateLineInput = z.infer<typeof createCorporateLineSchema>
+export type UpdateCorporateLineInput = z.infer<typeof updateCorporateLineSchema>

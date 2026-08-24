@@ -356,6 +356,8 @@ export async function listEquipment(
     departmentId?: string
     locationId?: string
     archived: 'exclude' | 'include' | 'only'
+    sort?: string
+    dir?: 'asc' | 'desc'
   },
 ) {
   // Prisma não oferece busca textual em todas as chaves de um JSONB sem
@@ -401,10 +403,35 @@ export async function listEquipment(
         }
       : {}),
   }
+  const dir = query.dir ?? 'desc'
+  const sortField = query.sort ?? 'updatedAt'
+  const orderBy: Prisma.InventoryEquipmentOrderByWithRelationInput[] = (() => {
+    switch (sortField) {
+      case 'patrimony':
+        return [{ patrimony: dir }, { id: 'asc' }]
+      case 'name':
+        return [{ name: dir }, { id: 'asc' }]
+      case 'category':
+        return [{ category: { name: dir } }, { id: 'asc' }]
+      case 'status':
+        return [{ status: dir }, { id: 'asc' }]
+      case 'holder':
+        return [{ currentHolder: { name: dir } }, { id: 'asc' }]
+      case 'department':
+        return [{ department: { name: dir } }, { id: 'asc' }]
+      case 'location':
+        return [{ location: { name: dir } }, { id: 'asc' }]
+      case 'createdAt':
+        return [{ createdAt: dir }, { id: 'asc' }]
+      default:
+        return [{ updatedAt: dir }, { id: 'asc' }]
+    }
+  })()
+
   const [items, total] = await Promise.all([
     prisma.inventoryEquipment.findMany({
       where,
-      orderBy: [{ updatedAt: 'desc' }, { id: 'asc' }],
+      orderBy,
       skip: (query.page - 1) * query.pageSize,
       take: query.pageSize,
       include: EQUIPMENT_INCLUDE,
@@ -434,7 +461,11 @@ export async function getEquipment(portalId: string, equipmentId: string) {
   return safeEquipment(equipment)
 }
 
-export async function createEquipment(context: InventoryContext, input: CreateEquipmentInput) {
+export async function createEquipment(
+  context: InventoryContext,
+  input: CreateEquipmentInput,
+  origin: 'MANUAL' | 'IMPORT' = 'MANUAL',
+) {
   try {
     return await prisma.$transaction(async (tx) => {
       const category = await ensureCategory(tx, context.portalId, input.categoryId)
@@ -479,7 +510,7 @@ export async function createEquipment(context: InventoryContext, input: CreateEq
             toDepartmentId: department?.id,
             toDepartmentName: department?.name,
             movedAt: inventoryTodayUtc(),
-            origin: 'INITIAL_REGISTRATION',
+            origin: origin === 'IMPORT' ? 'IMPORT' : 'INITIAL_REGISTRATION',
             performedByBitrixUserId: context.bitrixUserId,
             performedByName: context.userName,
           },
@@ -492,7 +523,7 @@ export async function createEquipment(context: InventoryContext, input: CreateEq
           action: 'inventory_equipment_created',
           entityType: 'InventoryEquipment',
           entityId: equipment.id,
-          metadata: { categoryId: input.categoryId },
+          metadata: { origin, categoryId: input.categoryId },
         },
         tx,
       )
@@ -509,6 +540,7 @@ export async function updateEquipment(
   context: InventoryContext,
   equipmentId: string,
   input: UpdateEquipmentInput,
+  origin: 'MANUAL' | 'IMPORT' = 'MANUAL',
 ) {
   try {
     return await prisma.$transaction(async (tx) => {
@@ -617,7 +649,7 @@ export async function updateEquipment(
               ? (destinationDepartment?.name ?? null)
               : current.department?.name,
             movedAt: inventoryTodayUtc(),
-            origin: 'MANUAL',
+            origin,
             performedByBitrixUserId: context.bitrixUserId,
             performedByName: context.userName,
           },
@@ -635,7 +667,7 @@ export async function updateEquipment(
           action: 'inventory_equipment_updated',
           entityType: 'InventoryEquipment',
           entityId: equipmentId,
-          metadata: { changedFields, movementId },
+          metadata: { origin, changedFields, movementId },
         },
         tx,
       )
@@ -1050,10 +1082,64 @@ export async function getPerson(portalId: string, personId: string) {
         include: EQUIPMENT_INCLUDE,
       },
       termsAsOrigin: { where: { archivedAt: null }, orderBy: { createdAt: 'desc' } },
+      corporateLines: {
+        where: { archivedAt: null },
+        orderBy: { normalizedNumber: 'asc' },
+        include: {
+          equipment: {
+            select: {
+              id: true,
+              patrimony: true,
+              assetTag: true,
+              name: true,
+              category: { select: { name: true } },
+            },
+          },
+        },
+      },
+      movementsFrom: {
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+        include: { equipment: { select: { id: true, patrimony: true, assetTag: true, name: true } } },
+      },
+      movementsTo: {
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+        include: { equipment: { select: { id: true, patrimony: true, assetTag: true, name: true } } },
+      },
     },
   })
   if (!person) throw new InventoryNotFoundError('Pessoa não encontrada.')
-  return { ...person, equipment: person.equipment.map(safeEquipment) }
+  const [extensions, audit] = await Promise.all([
+    prisma.inventoryExtension.findMany({
+      where: {
+        portalId,
+        archivedAt: null,
+        collaborator: { equals: person.name, mode: 'insensitive' },
+      },
+      orderBy: { number: 'asc' },
+    }),
+    prisma.auditLog.findMany({
+      where: {
+        portalId,
+        entityType: 'InventoryPerson',
+        entityId: person.id,
+        action: { startsWith: 'inventory_' },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    }),
+  ])
+  const movementHistory = [...person.movementsFrom, ...person.movementsTo].sort(
+    (left, right) => right.createdAt.getTime() - left.createdAt.getTime(),
+  )
+  return {
+    ...person,
+    equipment: person.equipment.map(safeEquipment),
+    extensions,
+    movementHistory,
+    audit,
+  }
 }
 
 async function validatePersonRelations(
