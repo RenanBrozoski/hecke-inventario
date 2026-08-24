@@ -78,8 +78,8 @@ try {
     $cards = @(Invoke-RestMethod -Uri "$glpiBaseUrl/apirest.php/Computer/$computerId/Item_DeviceNetworkCard" -Headers $headers -TimeoutSec 30)
     $processor = $processors | Select-Object -First 1
     $processorName = if ($processor) { Get-GlpiName $headers 'DeviceProcessor' $processor.deviceprocessors_id } else { $null }
-    $ramMb = @($memories | ForEach-Object { [int]$_.size } | Measure-Object -Sum).Sum
-    $driveText = @($drives | ForEach-Object { "{0:N0} GB" -f ([double]$_.capacity / 1000) }) -join ' + '
+    $ramMb = @($memories | ForEach-Object { [int](First-GlpiValue $_.size) } | Measure-Object -Sum).Sum
+    $driveText = @($drives | ForEach-Object { "{0:N0} GB" -f ([double](First-GlpiValue $_.capacity) / 1000) }) -join ' + '
     [ordered]@{
       id = [int]$computerId
       name = if ($computerName) { [string]$computerName } else { "Computador GLPI $computerId" }
