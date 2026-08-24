@@ -21,10 +21,43 @@ function First-GlpiValue($Value) {
   return $Value
 }
 
+function Expand-GlpiValues($Value) {
+  if ($null -eq $Value) { return }
+  if ($Value -is [System.Array]) {
+    foreach ($item in $Value) { Expand-GlpiValues $item }
+    return
+  }
+  $Value
+}
+
+function Get-GlpiPropertyValues($Items, [string]$Property) {
+  foreach ($item in @($Items)) {
+    if ($null -eq $item) { continue }
+    $value = $item.PSObject.Properties[$Property].Value
+    foreach ($entry in @(Expand-GlpiValues $value)) {
+      if (-not [string]::IsNullOrWhiteSpace([string]$entry)) { [string]$entry }
+    }
+  }
+}
+
+function Get-GlpiCollection($Headers, [string]$Path) {
+  try {
+    return @(Invoke-RestMethod -Uri "$glpiBaseUrl/apirest.php/$Path" -Headers $Headers -TimeoutSec 30)
+  } catch {
+    Write-Warning "Não foi possível ler $Path no GLPI; o restante do equipamento será sincronizado."
+    return @()
+  }
+}
+
 function Get-GlpiName($Headers, [string]$Type, $Id) {
   if (-not $Id) { return $null }
-  $record = Invoke-RestMethod -Uri "$glpiBaseUrl/apirest.php/$Type/$Id" -Headers $Headers -TimeoutSec 30
-  return [string](First-GlpiValue $record.name)
+  try {
+    $record = Invoke-RestMethod -Uri "$glpiBaseUrl/apirest.php/$Type/$Id" -Headers $Headers -TimeoutSec 30
+    return [string](First-GlpiValue $record.name)
+  } catch {
+    Write-Warning "Não foi possível ler $Type/$Id no GLPI."
+    return $null
+  }
 }
 
 $glpiBaseUrl = (Require-Environment 'GLPI_BASE_URL').TrimEnd('/')
@@ -72,29 +105,40 @@ try {
     $manufacturer = First-GlpiValue $detail.manufacturers_id
     $model = First-GlpiValue $detail.computermodels_id
     $operatingSystem = First-GlpiValue $detail.operatingsystems_id
-    $processors = @(Invoke-RestMethod -Uri "$glpiBaseUrl/apirest.php/Computer/$computerId/Item_DeviceProcessor" -Headers $headers -TimeoutSec 30)
-    $memories = @(Invoke-RestMethod -Uri "$glpiBaseUrl/apirest.php/Computer/$computerId/Item_DeviceMemory" -Headers $headers -TimeoutSec 30)
-    $drives = @(Invoke-RestMethod -Uri "$glpiBaseUrl/apirest.php/Computer/$computerId/Item_DeviceHardDrive" -Headers $headers -TimeoutSec 30)
-    $cards = @(Invoke-RestMethod -Uri "$glpiBaseUrl/apirest.php/Computer/$computerId/Item_DeviceNetworkCard" -Headers $headers -TimeoutSec 30)
+    $ipAddress = Get-GlpiPropertyValues @($detail) 'ip' | Select-Object -First 1
+    $antivirus = Get-GlpiPropertyValues @($detail) 'antivirus' | Select-Object -First 1
+    $processors = Get-GlpiCollection $headers "Computer/$computerId/Item_DeviceProcessor"
+    $memories = Get-GlpiCollection $headers "Computer/$computerId/Item_DeviceMemory"
+    $drives = Get-GlpiCollection $headers "Computer/$computerId/Item_DeviceHardDrive"
+    $cards = Get-GlpiCollection $headers "Computer/$computerId/Item_DeviceNetworkCard"
+    $videoCards = Get-GlpiCollection $headers "Computer/$computerId/Item_DeviceGraphicCard"
     $processor = $processors | Select-Object -First 1
     $processorName = if ($processor) { Get-GlpiName $headers 'DeviceProcessor' $processor.deviceprocessors_id } else { $null }
-    $ramMb = @($memories | ForEach-Object { [int](First-GlpiValue $_.size) } | Measure-Object -Sum).Sum
-    $driveText = @($drives | ForEach-Object { "{0:N0} GB" -f ([double](First-GlpiValue $_.capacity) / 1000) }) -join ' + '
+    $videoCard = $videoCards | Select-Object -First 1
+    $videoCardName = if ($videoCard) { Get-GlpiName $headers 'DeviceGraphicCard' (First-GlpiValue $videoCard.devicegraphiccards_id) } else { $null }
+    $ramModules = @(Get-GlpiPropertyValues $memories 'size' | ForEach-Object { [int]$_ } | Where-Object { $_ -gt 0 })
+    $ramMb = @($ramModules | Measure-Object -Sum).Sum
+    $driveCapacities = @(Get-GlpiPropertyValues $drives 'capacity' | ForEach-Object { [double]$_ } | Where-Object { $_ -gt 0 })
+    $driveText = @($driveCapacities | ForEach-Object { "{0:N0} GB" -f ($_ / 1000) }) -join ' + '
+    $macAddresses = @(Get-GlpiPropertyValues $cards 'mac' | Select-Object -Unique)
     [ordered]@{
       id = [int]$computerId
       name = if ($computerName) { [string]$computerName } else { "Computador GLPI $computerId" }
       serialNumber = if ($serial) { [string]$serial } else { $null }
-      assetTag = if ($otherSerial) { [string]$otherSerial } else { $null }
+      glpiOtherSerial = if ($otherSerial) { [string]$otherSerial } else { $null }
       manufacturer = if ($manufacturer) { [string]$manufacturer } else { $null }
       model = if ($model) { [string]$model } else { $null }
       operatingSystem = if ($operatingSystem) { [string]$operatingSystem } else { $null }
       motherboard = ((@($manufacturer, $model) | Where-Object { $_ }) -join ' ')
       processor = if ($processorName) { "$processorName ($($processor.frequency) MHz)" } else { $null }
+      videoCard = if ($videoCardName) { [string]$videoCardName } else { $null }
       memory = if ($ramMb) { "{0:N0} GB" -f ([double]$ramMb / 1024) } else { $null }
-      memoryModules = @($memories).Count
+      memoryModules = if ($ramModules.Count) { $ramModules.Count } else { $null }
       storage = if ($driveText) { $driveText } else { $null }
-      macCable = if ($cards.Count -gt 0) { [string]$cards[0].mac } else { $null }
-      macWifi = if ($cards.Count -gt 1) { [string]$cards[1].mac } else { $null }
+      macCable = if ($macAddresses.Count -gt 0) { [string]$macAddresses[0] } else { $null }
+      macWifi = if ($macAddresses.Count -gt 1) { [string]$macAddresses[1] } else { $null }
+      ipAddress = if ($ipAddress) { [string]$ipAddress } else { $null }
+      antivirus = if ($antivirus) { [string]$antivirus } else { $null }
     }
   }
   if (-not $items.Count) { Write-Output 'GLPI não retornou computadores para sincronizar.'; exit 0 }

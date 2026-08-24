@@ -7,17 +7,22 @@ const glpiItemSchema = z.object({
   id: z.number().int().positive(),
   name: z.string().trim().min(1).max(200),
   serialNumber: z.string().trim().max(200).nullable().optional(),
+  glpiOtherSerial: z.string().trim().max(100).nullable().optional(),
+  // Compatibilidade com o lançador anterior. Nunca é gravada como TAG patrimonial.
   assetTag: z.string().trim().max(100).nullable().optional(),
   manufacturer: z.string().trim().max(200).nullable().optional(),
   model: z.string().trim().max(200).nullable().optional(),
   operatingSystem: z.string().trim().max(300).nullable().optional(),
   motherboard: z.string().trim().max(300).nullable().optional(),
   processor: z.string().trim().max(300).nullable().optional(),
+  videoCard: z.string().trim().max(300).nullable().optional(),
   memory: z.string().trim().max(300).nullable().optional(),
   memoryModules: z.number().int().min(0).max(64).nullable().optional(),
   storage: z.string().trim().max(300).nullable().optional(),
   macCable: z.string().trim().max(50).nullable().optional(),
   macWifi: z.string().trim().max(50).nullable().optional(),
+  ipAddress: z.string().trim().max(100).nullable().optional(),
+  antivirus: z.string().trim().max(300).nullable().optional(),
 })
 
 export const glpiSyncPayloadSchema = z.object({
@@ -30,6 +35,10 @@ export type GlpiSyncPayload = z.infer<typeof glpiSyncPayloadSchema>
 
 function nullable(value: string | null | undefined): string | null {
   return value?.trim() || null
+}
+
+function presentSpecs(specs: Record<string, string | number | null>) {
+  return Object.fromEntries(Object.entries(specs).filter(([, value]) => value !== null))
 }
 
 /** Importa somente fatos técnicos descobertos pelo GLPI. Situação, responsável,
@@ -64,25 +73,32 @@ export async function syncGlpiComputers(payload: GlpiSyncPayload) {
             legacyId: item.id,
           },
         },
-        select: { id: true, specs: true },
+        select: { id: true, specs: true, assetTag: true },
       })
+      const otherSerial = nullable(item.glpiOtherSerial ?? item.assetTag)
       const glpiSpecs = {
         id: item.id,
+        otherSerial,
         manufacturer: nullable(item.manufacturer),
         model: nullable(item.model),
         operatingSystem: nullable(item.operatingSystem),
         syncedAt: new Date().toISOString(),
       }
-      const visibleSpecs = {
+      // O GLPI é fonte das especificações técnicas, mas campos que ele não reporta
+      // não podem apagar informações cadastradas manualmente no inventário.
+      const visibleSpecs = presentSpecs({
         windows: nullable(item.operatingSystem),
         placa_mae: nullable(item.motherboard),
         processador: nullable(item.processor),
+        placa_video: nullable(item.videoCard),
         ram: nullable(item.memory),
         ram_pentes: item.memoryModules ?? null,
         armazenamento: nullable(item.storage),
         mac_cabo: nullable(item.macCable),
         mac_wifi: nullable(item.macWifi),
-      }
+        ip: nullable(item.ipAddress),
+        antivirus: nullable(item.antivirus),
+      })
       if (existing) {
         const specs = typeof existing.specs === 'object' && existing.specs && !Array.isArray(existing.specs)
           ? { ...existing.specs, ...visibleSpecs, glpi: glpiSpecs }
@@ -92,7 +108,9 @@ export async function syncGlpiComputers(payload: GlpiSyncPayload) {
           data: {
             name: item.name,
             serialNumber: nullable(item.serialNumber),
-            assetTag: nullable(item.assetTag),
+            // Corrige registros criados pelo conector antigo sem remover uma TAG
+            // que tenha sido definida manualmente depois.
+            assetTag: existing.assetTag === otherSerial ? null : undefined,
             specs,
             revision: { increment: 1 },
           },
@@ -107,7 +125,6 @@ export async function syncGlpiComputers(payload: GlpiSyncPayload) {
             legacyId: item.id,
             name: item.name,
             serialNumber: nullable(item.serialNumber),
-            assetTag: nullable(item.assetTag),
             status: InventoryEquipmentStatus.ACTIVE,
             specs: { ...visibleSpecs, glpi: glpiSpecs },
           },
