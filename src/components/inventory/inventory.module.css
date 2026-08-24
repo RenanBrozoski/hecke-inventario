@@ -1,5 +1,25 @@
 .module {
+  --color-bg: #f5f7fb;
+  --color-bg-elevated: #ffffff;
+  --color-bg-subtle: #f0f4fa;
+  --color-border: #d9e1ec;
+  --color-text: #182230;
+  --color-text-muted: #607086;
+  --color-primary: #2563c9;
+  --color-primary-hover: #1d4fa4;
+  --color-primary-contrast: #ffffff;
+  --color-danger: #ba2d3b;
+  --color-danger-bg: #fff0f1;
+  --color-success: #187244;
+  --color-success-bg: #e9f8ef;
+  --color-warning: #8a5a00;
+  --color-warning-bg: #fff6df;
+  color-scheme: light;
+  min-height: calc(100vh - 3rem);
   min-width: 0;
+  padding: 1.25rem;
+  border-radius: var(--radius-lg);
+  background: var(--color-bg);
 }
 
 .moduleBar {
@@ -7,8 +27,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  margin: -0.35rem 0 1.25rem;
-  padding: 0.7rem 0;
+  margin: -0.15rem 0 1.25rem;
+  padding: 0.65rem 0 0.85rem;
   border-bottom: 1px solid var(--color-border);
 }
 
@@ -29,6 +49,12 @@
   background: var(--color-bg-subtle);
   color: var(--color-text);
   text-decoration: none;
+}
+
+.moduleNav a:focus-visible,
+.categoryGroup:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 .role {
@@ -110,7 +136,7 @@
 
 .categoryGroups {
   display: grid;
-  grid-template-columns: repeat(5, minmax(115px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
   gap: 0.55rem;
 }
 
@@ -558,6 +584,11 @@
 }
 
 @media (max-width: 620px) {
+  .module {
+    padding: 0.8rem;
+    border-radius: 0;
+  }
+
   .moduleBar,
   .pageHeader,
   .pagination {

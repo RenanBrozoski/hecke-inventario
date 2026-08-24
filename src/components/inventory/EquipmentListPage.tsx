@@ -54,26 +54,6 @@ const DEFAULT_FILTERS: Filters = {
 
 const PAGE_SIZE_OPTIONS = ['25', '50', '100']
 
-const CATEGORY_GROUPS = [
-  { key: 'computers', label: 'Computadores', description: 'Desktops e notebooks', match: /desktop|notebook|computador/i },
-  { key: 'phones', label: 'Celulares', description: 'Smartphones e tablets', match: /smartphone|celular|tablet/i },
-  { key: 'monitors', label: 'Monitores', description: 'Telas e periféricos visuais', match: /monitor/i },
-] as const
-
-function groupCategoryIds(
-  categories: InventoryLookupsResponse['categories'],
-  key: (typeof CATEGORY_GROUPS)[number]['key'] | 'other',
-) {
-  if (key === 'other') {
-    return categories
-      .filter((category) => !CATEGORY_GROUPS.some((group) => group.match.test(category.name)))
-      .map((category) => category.id)
-  }
-  return categories
-    .filter((category) => CATEGORY_GROUPS.find((group) => group.key === key)?.match.test(category.name))
-    .map((category) => category.id)
-}
-
 export function EquipmentListPage() {
   return <InventoryGate>{(context) => <EquipmentListContent context={context} />}</InventoryGate>
 }
@@ -169,13 +149,13 @@ function EquipmentListContent({ context }: { context: InventoryContextResponse }
     void load()
   }, [load])
 
-  // A tela abre em Computadores para não misturar PC, monitor e celular logo de saída.
+  // A tela abre na primeira categoria cadastrada, sem misturar tipos distintos.
   useEffect(() => {
     if (initialGroupApplied.current || !lookups || filters.categoryId || filters.categoryIds) return
     initialGroupApplied.current = true
-    const computerIds = groupCategoryIds(lookups.categories, 'computers')
-    if (!computerIds.length) return
-    const next = { ...filters, categoryIds: computerIds.join(',') }
+    const firstCategory = lookups.categories[0]
+    if (!firstCategory) return
+    const next = { ...filters, categoryId: firstCategory.id }
     setFilters(next)
     setDraft(next)
     setPage(1)
@@ -209,9 +189,8 @@ function EquipmentListContent({ context }: { context: InventoryContextResponse }
     setPage(1)
   }
 
-  function selectCategoryGroup(key: (typeof CATEGORY_GROUPS)[number]['key'] | 'other' | 'all') {
-    const ids = key === 'all' ? [] : groupCategoryIds(lookups?.categories ?? [], key)
-    const next = { ...filters, categoryId: '', categoryIds: ids.join(',') }
+  function selectCategory(categoryId: string) {
+    const next = { ...filters, categoryId, categoryIds: '' }
     setFilters(next)
     setDraft(next)
     setPage(1)
@@ -287,20 +266,15 @@ function EquipmentListContent({ context }: { context: InventoryContextResponse }
       </header>
 
       {lookups && (
-        <section className={styles.categoryWorkbench} aria-label="Separar equipamentos por tipo">
+        <section className={styles.categoryWorkbench} aria-label="Separar equipamentos por categoria">
           <div className={styles.categoryWorkbenchIntro}>
             <span className={styles.eyebrow}>Navegação rápida</span>
-            <strong>Trabalhe por tipo de ativo</strong>
-            <small>Computadores, celulares e monitores ficam em listas separadas.</small>
+            <strong>Trabalhe por categoria</strong>
+            <small>Crie e nomeie as categorias na configuração. A lista não agrupa tipos à força.</small>
           </div>
           <div className={styles.categoryGroups}>
-            <CategoryGroupButton label="Todos" description="Inventário completo" active={!filters.categoryId && !filters.categoryIds} onClick={() => selectCategoryGroup('all')} />
-            {CATEGORY_GROUPS.map((group) => {
-              const ids = groupCategoryIds(lookups.categories, group.key)
-              if (!ids.length) return null
-              return <CategoryGroupButton key={group.key} label={group.label} description={group.description} active={filters.categoryIds === ids.join(',')} onClick={() => selectCategoryGroup(group.key)} />
-            })}
-            {groupCategoryIds(lookups.categories, 'other').length > 0 && <CategoryGroupButton label="Outros" description="Coletores, rádios e servidores" active={filters.categoryIds === groupCategoryIds(lookups.categories, 'other').join(',')} onClick={() => selectCategoryGroup('other')} />}
+            <CategoryGroupButton label="Todos" description="Inventário completo" active={!filters.categoryId && !filters.categoryIds} onClick={() => selectCategory('')} />
+            {lookups.categories.map((category) => <CategoryGroupButton key={category.id} label={category.name} description="Ver somente esta categoria" active={filters.categoryId === category.id} onClick={() => selectCategory(category.id)} />)}
           </div>
         </section>
       )}

@@ -149,6 +149,8 @@ function CategoriesSettings({
   const [selectedId, setSelectedId] = useState(categories[0]?.id ?? '')
   const [name, setName] = useState('')
   const [prefix, setPrefix] = useState('')
+  const [categoryName, setCategoryName] = useState('')
+  const [categoryPrefix, setCategoryPrefix] = useState('')
   const [field, setField] = useState({
     key: '',
     label: '',
@@ -163,6 +165,10 @@ function CategoriesSettings({
   useEffect(() => {
     if (!selectedId && categories[0]) setSelectedId(categories[0].id)
   }, [categories, selectedId])
+  useEffect(() => {
+    setCategoryName(selected?.name ?? '')
+    setCategoryPrefix(selected?.prefix ?? '')
+  }, [selected?.id, selected?.name, selected?.prefix])
   async function createCategory(event: FormEvent) {
     event.preventDefault()
     setSaving(true)
@@ -229,6 +235,28 @@ function CategoriesSettings({
       setSaving(false)
     }
   }
+  async function updateSelectedCategory(event: FormEvent) {
+    event.preventDefault()
+    if (!selected) return
+    setSaving(true); setError(null)
+    try {
+      const response = await authorizedFetch(`/api/inventory/categories/${selected.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ revision: selected.revision, name: categoryName.trim(), prefix: categoryPrefix.trim() || null }),
+      })
+      if (!response.ok) throw new Error(await readApiError(response, 'Não foi possível atualizar a categoria.'))
+      await reload()
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Falha ao atualizar a categoria.') } finally { setSaving(false) }
+  }
+  async function deactivateSelectedCategory() {
+    if (!selected || !window.confirm(`Remover “${selected.name}” da lista? A categoria será inativada e os dados serão preservados.`)) return
+    setSaving(true); setError(null)
+    try {
+      const response = await authorizedFetch(`/api/inventory/categories/${selected.id}?revision=${selected.revision}`, { method: 'DELETE' })
+      if (!response.ok) throw new Error(await readApiError(response, 'Não foi possível inativar a categoria.'))
+      await reload()
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Falha ao inativar a categoria.') } finally { setSaving(false) }
+  }
   return (
     <div>
       {error && <p className="alert alert-error">{error}</p>}
@@ -273,6 +301,19 @@ function CategoriesSettings({
               </button>
             ))}
           </div>
+          {selected && (
+            <form className={styles.sectionTitle} onSubmit={updateSelectedCategory}>
+              <h3>Editar categoria selecionada</h3>
+              <div className={styles.formGrid}>
+                <Field label="Nome"><input value={categoryName} onChange={(event) => setCategoryName(event.target.value)} required /></Field>
+                <Field label="Prefixo"><input value={categoryPrefix} onChange={(event) => setCategoryPrefix(event.target.value)} maxLength={30} /></Field>
+              </div>
+              <div className={styles.actions}>
+                <button type="submit" className="primary" disabled={saving}>Salvar categoria</button>
+                {selected.active && <button type="button" disabled={saving} onClick={() => void deactivateSelectedCategory()}>Inativar / remover</button>}
+              </div>
+            </form>
+          )}
         </section>
         <section className={styles.card}>
           <h2>{selected ? `Campos · ${selected.name}` : 'Campos'}</h2>
