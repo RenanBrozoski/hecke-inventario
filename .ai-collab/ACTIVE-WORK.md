@@ -8,9 +8,12 @@
 
 ## Claude
 
-- **Estado:** tarefa proposta — Fatia E, gestão dedicada de setores e locais.
-- **Última entrega:** `1afc13a` tela de auditoria, before/after, export filtrado, CSS fix.
-- **Arquivos em uso:** nenhum.
+- **Estado:** em progresso — histórico unificado (AuditLog + movements na timeline do equipamento).
+- **Última entrega:** `45b9142` fix CSS detailGrid e classes ausentes na timeline.
+- **Arquivos em uso:**
+  - `src/components/inventory/EquipmentDetailPage.tsx`
+  - `src/components/inventory/types.ts`
+  - `src/modules/inventory/service.ts`
 
 Próximas áreas disponíveis (nenhuma reclamada):
 - Fatia D: UI de gerenciamento de Setores (Departments)

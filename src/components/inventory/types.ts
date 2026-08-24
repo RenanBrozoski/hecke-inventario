@@ -90,6 +90,15 @@ export interface InventoryMovement {
   equipment?: { id: string; patrimony?: string | null; name?: string | null }
 }
 
+export interface EquipmentAuditEvent {
+  id: string
+  action: string
+  bitrixUserId: string
+  userName: string | null
+  createdAt: string
+  metadata: Record<string, unknown> | null
+}
+
 export interface EquipmentDetail extends EquipmentSummary {
   currentHolderId?: string | null
   departmentId?: string | null
@@ -106,6 +115,7 @@ export interface EquipmentDetail extends EquipmentSummary {
   notes?: string | null
   createdAt: string
   movements?: InventoryMovement[]
+  auditEvents?: EquipmentAuditEvent[]
 }
 
 export interface EquipmentListResponse {

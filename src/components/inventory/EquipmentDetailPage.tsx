@@ -15,7 +15,7 @@ import {
 } from './format'
 import { InventoryAttachments } from './InventoryAttachments'
 import { InventoryGate } from './InventoryGate'
-import type { EquipmentDetail, InventoryContextResponse, InventoryLookupsResponse } from './types'
+import type { EquipmentAuditEvent, EquipmentDetail, InventoryContextResponse, InventoryLookupsResponse, InventoryMovement } from './types'
 import styles from './inventory.module.css'
 
 export function EquipmentDetailPage({ equipmentId }: { equipmentId: string }) {
@@ -282,46 +282,11 @@ function EquipmentDetailContent({
         </div>
       </section>
 
-      {/* Seção 4: Histórico */}
+      {/* Seção 4: Histórico unificado */}
       <section className={styles.detailSection}>
         <h2 className={styles.detailSectionTitle}>Histórico</h2>
         <div className={styles.card}>
-          {!equipment.movements?.length ? (
-            <p className={styles.empty}>Nenhuma movimentação registrada para este equipamento.</p>
-          ) : (
-            <ul className={styles.timeline}>
-              {equipment.movements.map((movement) => (
-                <li key={movement.id}>
-                  <div className={styles.timelineAction}>
-                    <span className={`${styles.badge} ${styles.timelineTypeBadge}`}>
-                      {movementOriginLabel(movement.origin)}
-                    </span>
-                    {movement.fromPersonName || movement.fromDepartmentName ? (
-                      <>
-                        {movement.fromPersonName || 'Sem responsável'} →{' '}
-                        {movement.toPersonName || 'Sem responsável'}
-                      </>
-                    ) : (
-                      <>Responsável: {movement.toPersonName || 'Sem responsável'}</>
-                    )}
-                  </div>
-                  {(movement.fromDepartmentName || movement.toDepartmentName) && (
-                    <div className={styles.timelineMeta}>
-                      Setor: {movement.fromDepartmentName || '—'} →{' '}
-                      {movement.toDepartmentName || '—'}
-                    </div>
-                  )}
-                  {movement.reason && (
-                    <div className={styles.timelineMeta}>Motivo: {movement.reason}</div>
-                  )}
-                  <div className={styles.timelineMeta}>
-                    {formatDate(movement.movedAt)}
-                    {movement.performedByName ? ` · ${movement.performedByName}` : ''}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
+          <UnifiedTimeline movements={equipment.movements} auditEvents={equipment.auditEvents} />
         </div>
       </section>
 
@@ -333,6 +298,152 @@ function EquipmentDetailContent({
       />
     </div>
   )
+}
+
+type TimelineEntry =
+  | { kind: 'movement'; data: InventoryMovement; ts: number }
+  | { kind: 'audit'; data: EquipmentAuditEvent; ts: number }
+
+function UnifiedTimeline({
+  movements,
+  auditEvents,
+}: {
+  movements?: InventoryMovement[]
+  auditEvents?: EquipmentAuditEvent[]
+}) {
+  const entries: TimelineEntry[] = [
+    ...(movements ?? []).map((m) => ({
+      kind: 'movement' as const,
+      data: m,
+      ts: new Date(m.movedAt ?? m.createdAt).getTime(),
+    })),
+    ...(auditEvents ?? []).map((a) => ({
+      kind: 'audit' as const,
+      data: a,
+      ts: new Date(a.createdAt).getTime(),
+    })),
+  ].sort((a, b) => b.ts - a.ts)
+
+  if (!entries.length) {
+    return <p className={styles.empty}>Nenhum histórico registrado para este equipamento.</p>
+  }
+
+  return (
+    <ul className={styles.timeline}>
+      {entries.map((entry) =>
+        entry.kind === 'movement' ? (
+          <MovementEntry key={`m-${entry.data.id}`} movement={entry.data} />
+        ) : (
+          <AuditEntry key={`a-${entry.data.id}`} event={entry.data} />
+        ),
+      )}
+    </ul>
+  )
+}
+
+function MovementEntry({ movement }: { movement: InventoryMovement }) {
+  return (
+    <li>
+      <div className={styles.timelineAction}>
+        <span className={`${styles.badge} ${styles.timelineTypeBadge}`}>
+          {movementOriginLabel(movement.origin)}
+        </span>
+        {movement.fromPersonName || movement.fromDepartmentName ? (
+          <>
+            {movement.fromPersonName || 'Sem responsável'} →{' '}
+            {movement.toPersonName || 'Sem responsável'}
+          </>
+        ) : (
+          <>Responsável: {movement.toPersonName || 'Sem responsável'}</>
+        )}
+      </div>
+      {(movement.fromDepartmentName || movement.toDepartmentName) && (
+        <div className={styles.timelineMeta}>
+          Setor: {movement.fromDepartmentName || '—'} → {movement.toDepartmentName || '—'}
+        </div>
+      )}
+      {movement.reason && (
+        <div className={styles.timelineMeta}>Motivo: {movement.reason}</div>
+      )}
+      <div className={styles.timelineMeta}>
+        {formatDate(movement.movedAt)}
+        {movement.performedByName ? ` · ${movement.performedByName}` : ''}
+      </div>
+    </li>
+  )
+}
+
+const AUDIT_ACTION_LABELS: Record<string, string> = {
+  inventory_equipment_created: 'Cadastrado',
+  inventory_equipment_updated: 'Editado',
+  inventory_equipment_archived: 'Arquivado',
+  inventory_equipment_restored: 'Restaurado',
+  inventory_equipment_deleted: 'Excluído',
+}
+
+const AUDIT_FIELD_LABELS: Record<string, string> = {
+  patrimony: 'Código interno',
+  assetTag: 'TAG patrimonial',
+  name: 'Nome',
+  categoryId: 'Categoria',
+  status: 'Situação',
+  currentHolderId: 'Responsável',
+  departmentId: 'Setor',
+  locationId: 'Local',
+  locationDetail: 'Detalhe do local',
+  serialNumber: 'Número de série',
+  invoiceNumber: 'Nota fiscal',
+  acquiredAt: 'Data de aquisição',
+  receivedAt: 'Data de recebimento',
+  deliveredAt: 'Data de entrega',
+  warrantyEndsAt: 'Fim da garantia',
+  notes: 'Observações',
+}
+
+function AuditEntry({ event }: { event: EquipmentAuditEvent }) {
+  const label = AUDIT_ACTION_LABELS[event.action] ?? event.action.replace(/^inventory_/, '').replace(/_/g, ' ')
+  const meta = event.metadata
+  const changedFields = (meta?.changedFields as string[] | undefined) ?? []
+  const before = (meta?.before as Record<string, unknown> | undefined) ?? {}
+  const after = (meta?.after as Record<string, unknown> | undefined) ?? {}
+
+  return (
+    <li>
+      <div className={styles.timelineAction}>
+        <span className={`${styles.badge} ${styles.timelineTypeBadge}`} style={{ background: 'var(--color-bg)', color: 'var(--color-primary)', border: '1px solid var(--color-primary)' }}>
+          {label}
+        </span>
+      </div>
+      {changedFields.length > 0 && (
+        <div className={styles.timelineMeta} style={{ marginTop: '0.25rem' }}>
+          {changedFields.map((field) => {
+            const fieldLabel = AUDIT_FIELD_LABELS[field] ?? field
+            const bVal = field in before ? formatAuditValue(before[field]) : null
+            const aVal = field in after ? formatAuditValue(after[field]) : null
+            if (bVal === null && aVal === null) return null
+            return (
+              <span key={field} style={{ display: 'block' }}>
+                <span style={{ color: 'var(--color-text-muted)' }}>{fieldLabel}:</span>{' '}
+                {bVal !== null && <span style={{ color: 'var(--color-danger)', textDecoration: 'line-through', marginRight: '0.25rem' }}>{bVal}</span>}
+                {aVal !== null && <span style={{ color: 'var(--color-success)' }}>{aVal}</span>}
+              </span>
+            )
+          })}
+        </div>
+      )}
+      <div className={styles.timelineMeta}>
+        {formatDateTime(event.createdAt)}
+        {event.userName ? ` · ${event.userName}` : event.bitrixUserId ? ` · #${event.bitrixUserId}` : ''}
+      </div>
+    </li>
+  )
+}
+
+function formatAuditValue(value: unknown): string | null {
+  if (value === null || value === undefined) return '(vazio)'
+  if (typeof value === 'string') return value || '(vazio)'
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  return null
 }
 
 function movementOriginLabel(origin: string): string {

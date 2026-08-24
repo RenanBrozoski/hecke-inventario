@@ -476,23 +476,52 @@ export async function getEquipmentCodeSuggestion(portalId: string, categoryId: s
 }
 
 export async function getEquipment(portalId: string, equipmentId: string) {
-  const equipment = await prisma.inventoryEquipment.findFirst({
-    where: { id: equipmentId, portalId },
-    include: {
-      ...EQUIPMENT_INCLUDE,
-      movements: {
-        orderBy: [{ movedAt: 'desc' }, { createdAt: 'desc' }],
-        include: {
-          fromPerson: { select: { id: true, name: true } },
-          toPerson: { select: { id: true, name: true } },
-          fromDepartment: { select: { id: true, name: true } },
-          toDepartment: { select: { id: true, name: true } },
+  const [equipment, rawAuditEvents] = await Promise.all([
+    prisma.inventoryEquipment.findFirst({
+      where: { id: equipmentId, portalId },
+      include: {
+        ...EQUIPMENT_INCLUDE,
+        movements: {
+          orderBy: [{ movedAt: 'desc' }, { createdAt: 'desc' }],
+          include: {
+            fromPerson: { select: { id: true, name: true } },
+            toPerson: { select: { id: true, name: true } },
+            fromDepartment: { select: { id: true, name: true } },
+            toDepartment: { select: { id: true, name: true } },
+          },
         },
       },
-    },
-  })
+    }),
+    prisma.auditLog.findMany({
+      where: {
+        portalId,
+        entityType: 'InventoryEquipment',
+        entityId: equipmentId,
+        action: { notIn: ['inventory_equipment_transferred', 'inventory_bulk_transfer_completed'] },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+      select: { id: true, action: true, bitrixUserId: true, createdAt: true, metadata: true },
+    }),
+  ])
   if (!equipment) throw new InventoryNotFoundError('Equipamento não encontrado.')
-  return safeEquipment(equipment)
+  const userIds = [...new Set(rawAuditEvents.map((e) => e.bitrixUserId))]
+  const userNames = userIds.length
+    ? await prisma.bitrixUser.findMany({
+        where: { portalId, bitrixUserId: { in: userIds } },
+        select: { bitrixUserId: true, fullName: true },
+      })
+    : []
+  const nameMap = new Map(userNames.map((u) => [u.bitrixUserId, u.fullName]))
+  return {
+    ...safeEquipment(equipment),
+    auditEvents: rawAuditEvents.map((e) => ({
+      ...e,
+      createdAt: e.createdAt.toISOString(),
+      userName: nameMap.get(e.bitrixUserId) ?? null,
+      metadata: e.metadata as Record<string, unknown> | null,
+    })),
+  }
 }
 
 export async function createEquipment(
