@@ -102,6 +102,7 @@ function EquipmentListContent({ context }: { context: InventoryContextResponse }
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [exporting, setExporting] = useState(false)
 
   const lookupsLoaded = useRef(false)
   const initialGroupApplied = useRef(false)
@@ -240,6 +241,26 @@ function EquipmentListContent({ context }: { context: InventoryContextResponse }
     return `/api/inventory/reports/equipment.csv${qs ? `?${qs}` : ''}`
   }
 
+  async function downloadCsv() {
+    setExporting(true)
+    setError(null)
+    try {
+      const response = await authorizedFetch(exportUrl())
+      if (!response.ok) throw new Error(await readApiError(response, 'Não foi possível exportar os equipamentos.'))
+      const blob = await response.blob()
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = 'inventario.csv'
+      document.body.append(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Falha ao exportar os equipamentos.')
+    } finally { setExporting(false) }
+  }
+
   return (
     <div>
       <header className={styles.pageHeader}>
@@ -252,9 +273,9 @@ function EquipmentListContent({ context }: { context: InventoryContextResponse }
           </p>
         </div>
         <div className={styles.actions}>
-          <a href={exportUrl()} target="_blank" rel="noopener noreferrer">
-            <button type="button">↓ Exportar CSV</button>
-          </a>
+          <button type="button" onClick={() => void downloadCsv()} disabled={exporting}>
+            {exporting ? 'Gerando CSV…' : '↓ Exportar CSV'}
+          </button>
           {context.canEdit && (
             <Link href="/inventory/equipment/new">
               <button type="button" className="primary">

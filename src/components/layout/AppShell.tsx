@@ -9,10 +9,10 @@ import type { MeResponse } from '@/src/components/session/SessionProvider'
  * As seções internas do inventário (Equipamentos, Colaboradores, Termos,
  * Relatórios, Configuração) ficam na navegação do próprio módulo, em
  * InventoryGate — aqui só entram os destinos de nível de aplicativo. */
-export function AppShell({ me, children }: { me: MeResponse; children: ReactNode }) {
+export function AppShell({ me, children, compact = false }: { me: MeResponse; children: ReactNode; compact?: boolean }) {
   return (
-    <div className="app-shell">
-      <nav className="app-shell__nav">
+    <div className={`app-shell${compact ? ' app-shell--compact' : ''}`}>
+      {!compact && <nav className="app-shell__nav">
         <div className="app-shell__nav-title">Inventário de TI</div>
 
         <div className="app-shell__nav-group">
@@ -26,7 +26,7 @@ export function AppShell({ me, children }: { me: MeResponse; children: ReactNode
             <Link href="/inventory/settings">Configuração do inventário</Link>
           </div>
         )}
-      </nav>
+      </nav>}
       <main className="app-shell__main">{children}</main>
     </div>
   )
