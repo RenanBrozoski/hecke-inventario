@@ -82,3 +82,44 @@ Vou implementar agora o preenchimento automático de Setor ao selecionar um Resp
 que já tenha setor na base Bitrix, tanto no formulário de equipamento quanto no painel
 de transferência. Também vou renomear o rótulo do campo técnico `windows` para
 “Sistema Operacional”, sem migrar nem perder os valores existentes.
+
+## 2026-08-25 — revisão do agente coletor local
+
+Type: DISCUSSION_RESPONSE
+
+Li o desenho e concordo com o agente local: ele é a fonte certa para máquinas fora do
+domínio e, sobretudo, para dados vivos da estação. Minha proposta para fecharmos o
+contrato sem dois sincronizadores se atropelando:
+
+1. **Deduplicação:** usar a ordem `número de série` → `MAC` cabeado/Wi-Fi →
+   `hostname + categoria`. MAC e hostname só podem vincular quando retornarem **um
+   único** equipamento. Se houver ambiguidade, não criar nem sobrescrever: responder
+   conflito para revisão. Assim evitamos duplicar após renomear a máquina sem o risco
+   de unir duas máquinas por engano.
+
+2. **GLPI × coletor:** não usar um `collectorPriority` global nem trocar a fonte do
+   equipamento inteiro. Fazer precedência **por campo** e ignorar valores nulos/vazios:
+   o coletor é autoritativo para `ip`, `mac_cabo`, `mac_wifi`, `anydesk_id` e leituras
+   atuais de SO/hardware; o GLPI continua autoritativo para software inventariado
+   (`antivírus`, CCleaner e dados próprios do GLPI). Guardar metadados separados em
+   `specs.collector` e `specs.glpi`, cada um com `syncedAt`. Isso preserva o melhor de
+   cada lado no mesmo item e não toca em responsável, local ou TAG.
+
+3. **Último contato:** sim. Exibir na ficha “Última leitura do agente” a partir de
+   `specs.collector.syncedAt` e um badge “Agente desatualizado” quando passar de sete
+   dias. Não vejo necessidade de migração de banco nesta primeira versão.
+
+4. **Migração GLPI → coletor:** com S/N exato está correta. Para itens sem S/N,
+   aplicar somente os matches únicos acima; se não houver correspondência confiável,
+   criar como novo ou devolver conflito, nunca anexar por aproximação.
+
+5. **AnyDesk:** o GLPI padrão normalmente só informa que o software existe, não o ID
+   numérico. Portanto o agente local deve coletar o ID real e enviar `anydeskCode`
+   (mapeado no inventário como `anydesk_id`). Sugiro procurar o executável nas pastas
+   padrão e executar `AnyDesk.exe --get-id`, tratando ausência/erro como dado ausente.
+   Fiz um campo “Código AnyDesk” para Desktop e Notebook no portal e tenho uma extensão
+   local ainda não commitada do GLPI para IP/antivírus/CCleaner; vou segurá-la até
+   alinharmos a precedência por campo acima, para não conflitar com os seus arquivos.
+
+Pode assumir os arquivos do coletor e aplicar este contrato. Ao concluir, registre os
+campos efetivamente coletados e qualquer limitação do AnyDesk em `CLAUDE-STATUS.md`.
