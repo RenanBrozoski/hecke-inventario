@@ -42,15 +42,10 @@ export async function POST(request: Request): Promise<NextResponse> {
     return errorHtml('Requisição inválida.', 400)
   }
 
-  // `DOMAIN` não é garantido no payload — ver resolvePortalDomain.
-  const domain = resolvePortalDomain(
-    form.get('DOMAIN')?.toString(),
-    form.get('SERVER_ENDPOINT')?.toString(),
-  )
   const memberId = form.get('member_id')?.toString()
   const authId = form.get('AUTH_ID')?.toString()
 
-  if (!domain || !memberId || !authId) {
+  if (!memberId || !authId) {
     return errorHtml('Dados de contexto incompletos.', 400)
   }
 
@@ -62,12 +57,26 @@ export async function POST(request: Request): Promise<NextResponse> {
     return errorHtml(`A instalação não está ativa no momento (status: ${portal.status}).`)
   }
 
+  // Usa o domínio armazenado na instalação para validar — o Bitrix24 envia
+  // "oauth.bitrix.info" como domínio em chamadas do painel de dev e de alguns
+  // contextos de sidebar, o que causaria falha ao chamar user.current. O domínio
+  // persistido foi validado durante a instalação real e é sempre o correto.
+  const validationDomain = portal.domain
+
+  // O domínio do form ainda é lido para detectar migrações legítimas de domínio
+  // (portal movido de subdomínio). Só atualiza se for um domínio real — nunca
+  // sobrescreve com "oauth.bitrix.info".
+  const formDomain = resolvePortalDomain(
+    form.get('DOMAIN')?.toString(),
+    form.get('SERVER_ENDPOINT')?.toString(),
+  )
+
   // Prova de identidade: SEMPRE valida contra o Bitrix24, nunca confia nos
   // campos do formulário isoladamente. Este AUTH_ID é efêmero — usado só nesta
   // chamada, nunca persistido, nunca sobrescreve o token da instalação.
   let currentUser
   try {
-    currentUser = await fetchCurrentUserWithContextToken(domain, authId)
+    currentUser = await fetchCurrentUserWithContextToken(validationDomain, authId)
   } catch (error) {
     logger.error(
       { portalId: portal.id, err: error },
@@ -80,15 +89,18 @@ export async function POST(request: Request): Promise<NextResponse> {
     return errorHtml('Seu usuário está inativo neste portal Bitrix24.')
   }
 
-  // O domínio só é atualizado DEPOIS de uma validação bem-sucedida contra ele
-  // mesmo — o Bitrix24 não devolveria um AUTH_ID válido para um domínio que não
-  // fosse realmente o desta instalação.
-  if (domain !== portal.domain) {
+  // Atualiza domínio apenas se o form trouxer um domínio real diferente do armazenado
+  // (migração legítima de portal). Ignora oauth.bitrix.info e valores vazios.
+  if (
+    formDomain &&
+    formDomain !== 'oauth.bitrix.info' &&
+    formDomain !== portal.domain
+  ) {
     logger.warn(
-      { portalId: portal.id, oldDomain: portal.domain, newDomain: domain },
+      { portalId: portal.id, oldDomain: portal.domain, newDomain: formDomain },
       'handler: domínio do portal mudou, atualizando após validação bem-sucedida',
     )
-    await prisma.bitrixPortal.update({ where: { id: portal.id }, data: { domain } })
+    await prisma.bitrixPortal.update({ where: { id: portal.id }, data: { domain: formDomain } })
   }
 
   // Resolve a corrida entre "primeira abertura" e "sync completo ainda não
