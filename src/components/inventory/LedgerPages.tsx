@@ -42,27 +42,36 @@ export function ReceivingsPage() {
   return <InventoryGate>{(context) => <ReceivingsContent context={context} />}</InventoryGate>
 }
 
+type ExtTab = 'all' | 'active' | 'inactive'
+const EXT_TABS: { key: ExtTab; label: string }[] = [
+  { key: 'all', label: 'Todos' },
+  { key: 'active', label: 'Ativos' },
+  { key: 'inactive', label: 'Sem uso / Reserva' },
+]
+
 function ExtensionsContent({ context }: { context: InventoryContextResponse }) {
   const { authorizedFetch } = useSession()
   const [data, setData] = useState<PageEnvelope<Extension> | null>(null)
   const [q, setQ] = useState('')
   const [appliedQ, setAppliedQ] = useState('')
   const [page, setPage] = useState(1)
-  const [form, setForm] = useState({
-    number: '',
-    collaborator: '',
-    department: '',
-    type: '',
-    notes: '',
-  })
+  const [tab, setTab] = useState<ExtTab>('all')
+  const [form, setForm] = useState({ number: '', collaborator: '', department: '', type: '', notes: '' })
   const [showForm, setShowForm] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editForm, setEditForm] = useState({
+    number: '', collaborator: '', department: '', type: '', active: true, notes: '',
+  })
+  const [editSaving, setEditSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setError(null)
     const params = new URLSearchParams({ page: String(page), pageSize: '25' })
     if (appliedQ) params.set('q', appliedQ)
+    if (tab === 'active') params.set('activeFilter', 'active')
+    if (tab === 'inactive') params.set('activeFilter', 'inactive')
     try {
       const response = await authorizedFetch(`/api/inventory/extensions?${params}`)
       if (!response.ok)
@@ -71,10 +80,16 @@ function ExtensionsContent({ context }: { context: InventoryContextResponse }) {
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Falha ao carregar os ramais.')
     }
-  }, [appliedQ, authorizedFetch, page])
-  useEffect(() => {
-    void load()
-  }, [load])
+  }, [appliedQ, authorizedFetch, page, tab])
+
+  useEffect(() => { void load() }, [load])
+
+  function changeTab(t: ExtTab) {
+    setTab(t)
+    setPage(1)
+    setAppliedQ('')
+    setQ('')
+  }
 
   async function create(event: FormEvent) {
     event.preventDefault()
@@ -106,6 +121,63 @@ function ExtensionsContent({ context }: { context: InventoryContextResponse }) {
     }
   }
 
+  function startEdit(item: Extension) {
+    setEditingId(item.id)
+    setEditForm({
+      number: item.number ?? '',
+      collaborator: item.collaborator ?? '',
+      department: item.department ?? '',
+      type: item.type ?? '',
+      active: item.active,
+      notes: item.notes ?? '',
+    })
+    setShowForm(false)
+  }
+
+  async function saveEdit(event: FormEvent) {
+    event.preventDefault()
+    if (!editingId) return
+    setEditSaving(true)
+    setError(null)
+    try {
+      const nullable = (value: string) => value.trim() || null
+      const response = await authorizedFetch(`/api/inventory/extensions/${editingId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          number: nullable(editForm.number),
+          collaborator: nullable(editForm.collaborator),
+          department: nullable(editForm.department),
+          type: nullable(editForm.type),
+          active: editForm.active,
+          notes: nullable(editForm.notes),
+        }),
+      })
+      if (!response.ok)
+        throw new Error(await readApiError(response, 'Não foi possível salvar o ramal.'))
+      setEditingId(null)
+      await load()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Falha ao salvar o ramal.')
+    } finally {
+      setEditSaving(false)
+    }
+  }
+
+  async function remove(id: string) {
+    if (!confirm('Excluir este ramal? Esta ação não pode ser desfeita.')) return
+    setError(null)
+    try {
+      const response = await authorizedFetch(`/api/inventory/extensions/${id}`, { method: 'DELETE' })
+      if (!response.ok)
+        throw new Error(await readApiError(response, 'Não foi possível excluir o ramal.'))
+      if (editingId === id) setEditingId(null)
+      await load()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Falha ao excluir o ramal.')
+    }
+  }
+
   return (
     <div>
       <Header
@@ -113,41 +185,26 @@ function ExtensionsContent({ context }: { context: InventoryContextResponse }) {
         subtitle={data ? `${data.total} ramal(is)` : 'Lista telefônica interna'}
         canEdit={context.canEdit}
         open={showForm}
-        setOpen={setShowForm}
+        setOpen={(v) => { setShowForm(v); if (v) setEditingId(null) }}
       />
       {showForm && (
         <form className={styles.card} onSubmit={create} style={{ marginBottom: '1rem' }}>
           <div className={styles.formGrid}>
             <Field label="Número">
-              <input
-                value={form.number}
-                onChange={(event) => setForm({ ...form, number: event.target.value })}
-              />
+              <input value={form.number} onChange={(e) => setForm({ ...form, number: e.target.value })} />
             </Field>
             <Field label="Colaborador">
-              <input
-                value={form.collaborator}
-                onChange={(event) => setForm({ ...form, collaborator: event.target.value })}
-              />
+              <input value={form.collaborator} onChange={(e) => setForm({ ...form, collaborator: e.target.value })} />
             </Field>
             <Field label="Setor">
-              <input
-                value={form.department}
-                onChange={(event) => setForm({ ...form, department: event.target.value })}
-              />
+              <input value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} />
             </Field>
             <Field label="Tipo">
-              <input
-                value={form.type}
-                onChange={(event) => setForm({ ...form, type: event.target.value })}
-              />
+              <input value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} />
             </Field>
             <div className={styles.spanTwo}>
               <Field label="Observações">
-                <textarea
-                  value={form.notes}
-                  onChange={(event) => setForm({ ...form, notes: event.target.value })}
-                />
+                <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
               </Field>
             </div>
           </div>
@@ -156,13 +213,63 @@ function ExtensionsContent({ context }: { context: InventoryContextResponse }) {
           </button>
         </form>
       )}
+      {editingId && (
+        <form className={styles.card} onSubmit={saveEdit} style={{ marginBottom: '1rem' }}>
+          <p style={{ margin: '0 0 0.75rem', fontWeight: 500 }}>Editar ramal</p>
+          <div className={styles.formGrid}>
+            <Field label="Número">
+              <input value={editForm.number} onChange={(e) => setEditForm({ ...editForm, number: e.target.value })} />
+            </Field>
+            <Field label="Colaborador">
+              <input value={editForm.collaborator} onChange={(e) => setEditForm({ ...editForm, collaborator: e.target.value })} />
+            </Field>
+            <Field label="Setor">
+              <input value={editForm.department} onChange={(e) => setEditForm({ ...editForm, department: e.target.value })} />
+            </Field>
+            <Field label="Tipo">
+              <input value={editForm.type} onChange={(e) => setEditForm({ ...editForm, type: e.target.value })} />
+            </Field>
+            <Field label="Situação">
+              <select
+                value={editForm.active ? 'true' : 'false'}
+                onChange={(e) => setEditForm({ ...editForm, active: e.target.value === 'true' })}
+              >
+                <option value="true">Ativo</option>
+                <option value="false">Sem uso / Reserva</option>
+              </select>
+            </Field>
+            <div className={styles.spanTwo}>
+              <Field label="Observações">
+                <textarea value={editForm.notes} onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })} />
+              </Field>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button className="primary" type="submit" disabled={editSaving}>
+              {editSaving ? 'Salvando…' : 'Salvar alterações'}
+            </button>
+            <button type="button" onClick={() => setEditingId(null)}>Cancelar</button>
+          </div>
+        </form>
+      )}
+      <div className={styles.tabBar} role="tablist">
+        {EXT_TABS.map(({ key, label }) => (
+          <button
+            key={key}
+            role="tab"
+            type="button"
+            aria-selected={tab === key}
+            className={styles.tabBtn}
+            onClick={() => changeTab(key)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
       <Search
         value={q}
         setValue={setQ}
-        onSubmit={() => {
-          setAppliedQ(q)
-          setPage(1)
-        }}
+        onSubmit={() => { setAppliedQ(q); setPage(1) }}
       />
       {error && <p className="alert alert-error">{error}</p>}
       {!data ? (
@@ -180,20 +287,29 @@ function ExtensionsContent({ context }: { context: InventoryContextResponse }) {
                   <th>Setor</th>
                   <th>Tipo</th>
                   <th>Situação</th>
+                  {context.canEdit && <th></th>}
                 </tr>
               </thead>
               <tbody>
                 {data.items.map((item) => (
-                  <tr key={item.id}>
+                  <tr key={item.id} className={editingId === item.id ? styles.rowEditing : undefined}>
                     <td>{item.number || '—'}</td>
                     <td>{item.collaborator || '—'}</td>
                     <td>{item.department || '—'}</td>
                     <td>{item.type || '—'}</td>
                     <td>
                       <span className={`${styles.badge} ${item.active ? styles.success : ''}`}>
-                        {item.active ? 'Ativo' : 'Inativo'}
+                        {item.active ? 'Ativo' : 'Sem uso'}
                       </span>
                     </td>
+                    {context.canEdit && (
+                      <td>
+                        <div className={styles.rowActions}>
+                          <button type="button" onClick={() => startEdit(item)}>Editar</button>
+                          <button type="button" onClick={() => void remove(item.id)}>Excluir</button>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

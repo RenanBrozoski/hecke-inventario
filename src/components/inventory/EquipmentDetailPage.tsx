@@ -187,7 +187,21 @@ function EquipmentDetailContent({
               <dt>Cadastrado em</dt>
               <dd>{formatDateTime(equipment.createdAt)}</dd>
               <dt>Última alteração</dt>
-              <dd>{formatDateTime(equipment.updatedAt)}</dd>
+              <dd>
+                {formatDateTime(equipment.updatedAt)}
+                {(() => {
+                  const d = daysSince(equipment.updatedAt)
+                  if (d === null) return null
+                  return (
+                    <span
+                      className={styles.badge}
+                      style={{ marginLeft: '0.4rem', fontSize: '0.65rem', verticalAlign: 'middle' }}
+                    >
+                      {daysAgoLabel(d)}
+                    </span>
+                  )
+                })()}
+              </dd>
             </dl>
           </div>
         </div>
@@ -255,6 +269,7 @@ function EquipmentDetailContent({
             {category?.fields?.some((f) => f.type === 'PASSWORD') && (
               <p className={styles.notice}>Campos de senha foram excluídos da migração.</p>
             )}
+            <AgentSyncBadge specs={equipment.specs} />
           </div>
           <div className={styles.card}>
             <h3 style={{ marginBottom: '0.75rem' }}>Observações</h3>
@@ -282,7 +297,19 @@ function EquipmentDetailContent({
         </div>
       </section>
 
-      {/* Seção 4: Histórico unificado */}
+      {/* Seção 4: Ações remotas (só aparece se o agente estiver instalado) */}
+      {context.canEdit && (() => {
+        const collector = (equipment.specs as Record<string, unknown>).collector as Record<string, unknown> | undefined
+        if (!collector?.syncedAt) return null
+        return (
+          <section className={styles.detailSection}>
+            <h2 className={styles.detailSectionTitle}>Ações remotas</h2>
+            <RemoteActionsPanel equipmentId={equipment.id} authorizedFetch={authorizedFetch} />
+          </section>
+        )
+      })()}
+
+      {/* Seção 5: Histórico unificado */}
       <section className={styles.detailSection}>
         <h2 className={styles.detailSectionTitle}>Histórico</h2>
         <div className={styles.card}>
@@ -637,10 +664,271 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   )
 }
 
+const COMMAND_LABELS: Record<string, string> = {
+  SET_WALLPAPER: 'Wallpaper',
+  SHOW_MESSAGE: 'Mensagem',
+  MAP_DRIVE: 'Mapear drive',
+}
+
+const COMMAND_STATUS_LABELS: Record<string, string> = {
+  PENDING: 'Aguardando',
+  SENT: 'Enviado',
+  DONE: 'Concluído',
+  FAILED: 'Falhou',
+}
+
+const COMMAND_STATUS_TONE: Record<string, string> = {
+  PENDING: '',
+  SENT: 'warning',
+  DONE: 'success',
+  FAILED: 'danger',
+}
+
+type RemoteCommand = {
+  id: string
+  command: string
+  params: Record<string, unknown>
+  status: string
+  result: string | null
+  createdAt: string
+  sentAt: string | null
+  doneAt: string | null
+}
+
+function RemoteActionsPanel({
+  equipmentId,
+  authorizedFetch,
+}: {
+  equipmentId: string
+  authorizedFetch: (url: string, init?: RequestInit) => Promise<Response>
+}) {
+  const [commands, setCommands] = useState<RemoteCommand[]>([])
+  const [sending, setSending] = useState(false)
+  const [cmdType, setCmdType] = useState<string>('SET_WALLPAPER')
+  const [params, setParams] = useState<Record<string, string>>({})
+  const [sendError, setSendError] = useState<string | null>(null)
+
+  const loadCommands = useCallback(async () => {
+    const res = await authorizedFetch(`/api/inventory/equipment/${equipmentId}/commands`)
+    if (res.ok) setCommands((await res.json()) as RemoteCommand[])
+  }, [authorizedFetch, equipmentId])
+
+  useEffect(() => { void loadCommands() }, [loadCommands])
+
+  const setParam = (key: string, value: string) =>
+    setParams((prev) => ({ ...prev, [key]: value }))
+
+  const send = async () => {
+    setSendError(null)
+    setSending(true)
+    try {
+      const res = await authorizedFetch(`/api/inventory/equipment/${equipmentId}/commands`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ equipmentId, command: cmdType, params }),
+      })
+      if (!res.ok) {
+        const data = (await res.json()) as { error?: string }
+        throw new Error(data.error ?? 'Erro ao enviar comando.')
+      }
+      setParams({})
+      await loadCommands()
+    } catch (e) {
+      setSendError(e instanceof Error ? e.message : 'Erro desconhecido.')
+    } finally {
+      setSending(false)
+    }
+  }
+
+  return (
+    <div className={styles.remoteActionsPanel}>
+      {/* Formulário de novo comando */}
+      <div className={styles.card}>
+        <h3 style={{ marginBottom: '0.75rem' }}>Novo comando</h3>
+        <div className={styles.remoteActionsForm}>
+          <label>
+            Tipo
+            <select value={cmdType} onChange={(e) => { setCmdType(e.target.value); setParams({}) }}>
+              {Object.entries(COMMAND_LABELS).map(([k, v]) => (
+                <option key={k} value={k}>{v}</option>
+              ))}
+            </select>
+          </label>
+
+          {cmdType === 'SET_WALLPAPER' && (
+            <>
+              <label>
+                URL da imagem
+                <input
+                  type="url"
+                  placeholder="https://..."
+                  value={params.url ?? ''}
+                  onChange={(e) => setParam('url', e.target.value)}
+                />
+              </label>
+              <label>
+                Estilo
+                <select value={params.style ?? 'FILL'} onChange={(e) => setParam('style', e.target.value)}>
+                  <option value="FILL">Preencher</option>
+                  <option value="FIT">Ajustar</option>
+                  <option value="STRETCH">Esticar</option>
+                  <option value="TILE">Lado a lado</option>
+                  <option value="CENTER">Centralizar</option>
+                </select>
+              </label>
+            </>
+          )}
+
+          {cmdType === 'SHOW_MESSAGE' && (
+            <>
+              <label>
+                Título
+                <input
+                  type="text"
+                  placeholder="Aviso de TI"
+                  value={params.title ?? ''}
+                  onChange={(e) => setParam('title', e.target.value)}
+                />
+              </label>
+              <label>
+                Mensagem
+                <textarea
+                  rows={3}
+                  placeholder="Texto da mensagem..."
+                  value={params.body ?? ''}
+                  onChange={(e) => setParam('body', e.target.value)}
+                />
+              </label>
+            </>
+          )}
+
+          {cmdType === 'MAP_DRIVE' && (
+            <>
+              <label>
+                Letra do drive
+                <input
+                  type="text"
+                  maxLength={1}
+                  placeholder="Z"
+                  value={params.letter ?? ''}
+                  onChange={(e) => setParam('letter', e.target.value.toUpperCase())}
+                  style={{ width: '4rem' }}
+                />
+              </label>
+              <label>
+                Caminho de rede
+                <input
+                  type="text"
+                  placeholder="\\servidor\pasta"
+                  value={params.path ?? ''}
+                  onChange={(e) => setParam('path', e.target.value)}
+                />
+              </label>
+            </>
+          )}
+
+          {sendError && <p className="alert alert-error" style={{ margin: 0 }}>{sendError}</p>}
+
+          <button type="button" disabled={sending} onClick={() => void send()}>
+            {sending ? 'Enviando…' : 'Enviar'}
+          </button>
+        </div>
+        <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '0.5rem' }}>
+          O comando será executado na próxima vez que o agente acordar (até 6 h).
+        </p>
+      </div>
+
+      {/* Histórico de comandos */}
+      {commands.length > 0 && (
+        <div className={styles.card}>
+          <h3 style={{ marginBottom: '0.75rem' }}>Histórico de comandos</h3>
+          <table className={styles.compactTable}>
+            <thead>
+              <tr>
+                <th>Comando</th>
+                <th>Status</th>
+                <th>Enviado</th>
+                <th>Resultado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {commands.map((c) => (
+                <tr key={c.id}>
+                  <td>{COMMAND_LABELS[c.command] ?? c.command}</td>
+                  <td>
+                    <span className={`${styles.badge} ${COMMAND_STATUS_TONE[c.status] ? styles[COMMAND_STATUS_TONE[c.status] as keyof typeof styles] : ''}`}>
+                      {COMMAND_STATUS_LABELS[c.status] ?? c.status}
+                    </span>
+                  </td>
+                  <td style={{ fontSize: '0.8rem' }}>{formatDateTime(c.createdAt)}</td>
+                  <td style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                    {c.result ?? '—'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function AgentSyncBadge({ specs }: { specs: Record<string, unknown> }) {
+  const collector = specs.collector as Record<string, string> | undefined
+  const syncedAt = collector?.syncedAt
+  if (!syncedAt) return null
+  const days = daysSince(syncedAt)
+  if (days === null) return null
+  const stale = days > 7
+  return (
+    <div className={styles.agentSyncInfo}>
+      <span className={styles.agentSyncLabel}>
+        Última leitura do agente:{' '}
+        <strong>{daysAgoLabel(days)}</strong>
+      </span>
+      {stale && (
+        <span className={`${styles.badge} ${styles.warning}`} style={{ fontSize: '0.65rem' }}>
+          Agente desatualizado
+        </span>
+      )}
+      <span className={styles.agentSyncDate}>{formatDateTime(syncedAt)}</span>
+    </div>
+  )
+}
+
+function daysSince(isoString: string | null | undefined): number | null {
+  if (!isoString) return null
+  const ms = Date.now() - new Date(isoString).getTime()
+  return Math.max(0, Math.floor(ms / 86_400_000))
+}
+
+function daysAgoLabel(days: number): string {
+  if (days === 0) return 'hoje'
+  if (days === 1) return 'ontem'
+  return `${days} dias atrás`
+}
+
+function formatRamSlots(value: unknown): string | null {
+  if (!Array.isArray(value) || !value.length) return null
+  const slots = value
+    .filter(
+      (v): v is { qty: number; gb: number } =>
+        typeof v === 'object' && v !== null && 'qty' in v && 'gb' in v,
+    )
+    .map((v) => ({ qty: Number(v.qty), gb: Number(v.gb) }))
+    .filter((v) => v.qty > 0 && v.gb > 0)
+  if (!slots.length) return null
+  const parts = slots.map((s) => `${s.qty}× ${s.gb}GB`)
+  const total = slots.reduce((sum, s) => sum + s.qty * s.gb, 0)
+  return parts.join(' + ') + ` = ${total}GB`
+}
+
 function formatSpec(value: unknown): string {
   if (value === true || value === 'true' || value === '1') return 'Sim'
   if (value === false || value === 'false' || value === '0') return 'Não'
   if (value === null || value === undefined || value === '') return '—'
+  if (Array.isArray(value)) return formatRamSlots(value) ?? '—'
   return typeof value === 'string' || typeof value === 'number'
     ? String(value)
     : JSON.stringify(value)

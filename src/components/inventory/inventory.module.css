@@ -605,6 +605,42 @@
   gap: 0.5rem;
 }
 
+/* Tab bar (extensions, etc.) */
+.tabBar {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: 1rem;
+}
+
+.tabBtn {
+  padding: 0.45rem 1rem;
+  font-size: 0.82rem;
+  font-weight: 500;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  cursor: pointer;
+  background: transparent;
+  color: var(--color-text-muted);
+  border-radius: 0;
+  transition: color 120ms, border-color 120ms;
+}
+
+.tabBtn:hover {
+  color: var(--color-text);
+}
+
+.tabBtn[aria-selected='true'] {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+}
+
+/* Row being edited */
+.rowEditing {
+  background: color-mix(in srgb, var(--color-primary) 6%, transparent) !important;
+}
+
 .badge {
   display: inline-flex;
   align-items: center;
@@ -852,4 +888,295 @@
     box-shadow: none;
     color: #000;
   }
+
+  /* Esconde sidebar e mantém apenas o conteúdo do termo */
+  .module:has(.termoPrintRoot) .inventorySidebar {
+    display: none !important;
+  }
+
+  .module:has(.termoPrintRoot) {
+    grid-template-columns: 1fr !important;
+  }
+
+  .termoPrintRoot .noPrint {
+    display: none !important;
+  }
+
+  .termoDocument {
+    padding: 0 !important;
+  }
+
+  .termoPage {
+    box-shadow: none !important;
+    border: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+}
+
+/* ===== Ações remotas ===== */
+
+.remoteActionsPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.remoteActionsForm {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.remoteActionsForm label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.remoteActionsForm input,
+.remoteActionsForm select,
+.remoteActionsForm textarea {
+  font-size: 0.9rem;
+}
+
+.compactTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.compactTable th,
+.compactTable td {
+  text-align: left;
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.compactTable th {
+  font-weight: 600;
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+/* ===== Seletor de colunas ===== */
+
+.colPicker {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 200;
+  min-width: 200px;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 16px rgba(0,0,0,.15);
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.colPicker strong {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--color-text-muted);
+  margin-bottom: 0.25rem;
+}
+
+.colPickerRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 0.15rem 0;
+}
+
+.colPickerClose {
+  margin-top: 0.5rem;
+  align-self: flex-end;
+  font-size: 0.8rem;
+}
+
+/* ===== Dashboard de agentes (fleet) ===== */
+
+.statsRow {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.statCard {
+  flex: 1 1 120px;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.statCard strong {
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.statCard span {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+}
+
+/* ===== Agente coletor — indicador de sincronização ===== */
+
+.agentSyncInfo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.9rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--color-border);
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.agentSyncLabel {
+  flex: 1 1 auto;
+}
+
+.agentSyncDate {
+  width: 100%;
+  font-size: 0.72rem;
+  opacity: 0.75;
+}
+
+/* ===== Termo de Responsabilidade ===== */
+
+.termoPrintRoot {
+  padding: 1.5rem;
+}
+
+.termoDocument {
+  padding: 0.5rem 0;
+}
+
+.termoPage {
+  background: #fff;
+  color: #111;
+  font-family: 'Times New Roman', Times, serif;
+  font-size: 12pt;
+  line-height: 1.6;
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 2.5cm 2.5cm 3cm;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
+}
+
+.termoHeader {
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+
+.termoCompanyName {
+  font-weight: bold;
+  font-size: 11pt;
+  letter-spacing: 0.04em;
+  margin: 0 0 0.5rem;
+}
+
+.termoTitle {
+  font-size: 13pt;
+  font-weight: bold;
+  text-transform: uppercase;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.termoParagraph {
+  margin: 0.6rem 0;
+  text-align: justify;
+}
+
+.termoClause {
+  margin: 1.1rem 0 0.4rem;
+  text-align: justify;
+}
+
+.termoList {
+  margin: 0.3rem 0 0.6rem 1.5rem;
+  padding: 0;
+}
+
+.termoList li {
+  margin-bottom: 0.25rem;
+  text-align: justify;
+}
+
+.termoTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 10pt;
+  margin: 0.8rem 0 1.2rem;
+}
+
+.termoTable th,
+.termoTable td {
+  border: 1px solid #555;
+  padding: 4px 6px;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.termoTable th {
+  background: #e8e8e8;
+  font-weight: bold;
+  font-size: 9pt;
+}
+
+.termoTable td:first-child,
+.termoTable th:first-child {
+  text-align: center;
+  width: 2.5em;
+}
+
+.termoTable td:last-child,
+.termoTable th:last-child {
+  text-align: center;
+  width: 2em;
+}
+
+.termoSignatureCity {
+  margin: 2.5rem 0 2rem;
+  text-align: right;
+}
+
+.termoSignatures {
+  display: flex;
+  gap: 4rem;
+  justify-content: space-between;
+  margin-top: 1rem;
+}
+
+.termoSignatureBlock {
+  flex: 1;
+  text-align: center;
+}
+
+.termoSignatureBlock p {
+  margin: 0.15rem 0;
+  font-size: 10pt;
+}
+
+.termoSignatureLine {
+  border-top: 1px solid #333;
+  margin-bottom: 0.4rem;
 }

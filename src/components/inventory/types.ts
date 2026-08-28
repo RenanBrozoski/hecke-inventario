@@ -4,7 +4,7 @@ export type PersonStatus = 'ACTIVE' | 'ON_LEAVE' | 'TERMINATED'
 export type EmploymentType = 'CLT' | 'PJ' | 'INTERN' | 'TEMPORARY' | 'OTHER'
 export type CorporateLineStatus = 'ACTIVE' | 'SUSPENDED' | 'CANCELLED' | 'AVAILABLE'
 export type FieldType =
-  'TEXT' | 'TEXTAREA' | 'NUMBER' | 'DATE' | 'SELECT' | 'BOOLEAN' | 'PASSWORD' | 'MAC' | 'IP'
+  'TEXT' | 'TEXTAREA' | 'NUMBER' | 'DATE' | 'SELECT' | 'BOOLEAN' | 'PASSWORD' | 'MAC' | 'IP' | 'RAM'
 
 export interface InventoryContextResponse {
   role: InventoryRole
@@ -68,12 +68,13 @@ export interface EquipmentSummary {
   status: EquipmentStatus
   revision: number
   archivedAt?: string | null
-  category: NamedLookup
+  category: NamedLookup & { fields?: InventoryFieldLookup[] }
   currentHolder?: PersonLookup | null
   department?: NamedLookup | null
   location?: NamedLookup | null
   serialNumber?: string | null
   updatedAt?: string
+  specs?: Record<string, unknown>
 }
 
 export interface InventoryMovement {

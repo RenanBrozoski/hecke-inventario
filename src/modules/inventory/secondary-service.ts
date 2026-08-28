@@ -19,6 +19,7 @@ type PageQuery = {
   pageSize: number
   q?: string
   archived: 'exclude' | 'include' | 'only'
+  activeFilter?: 'active' | 'inactive'
 }
 
 function page<T>(items: T[], total: number, query: PageQuery) {
@@ -79,6 +80,8 @@ async function audited<T>(
 export async function listExtensions(portalId: string, query: PageQuery) {
   const where: Prisma.InventoryExtensionWhereInput = {
     ...archiveWhere(portalId, query.archived),
+    ...(query.activeFilter === 'active' ? { active: true } : {}),
+    ...(query.activeFilter === 'inactive' ? { active: false } : {}),
     ...(query.q
       ? {
           OR: [

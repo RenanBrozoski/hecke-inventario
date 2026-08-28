@@ -130,6 +130,7 @@ model BitrixPortal {
   inventoryAttachments         InventoryAttachment[]
   inventoryBlobCleanups        InventoryBlobCleanup[]
   inventoryImportRuns          InventoryImportRun[]
+  collectorCommands            CollectorCommand[]
 
   @@map("bitrix_portals")
 }
@@ -285,6 +286,7 @@ enum InventoryFieldType {
   PASSWORD
   MAC
   IP
+  RAM
 }
 
 enum InventoryMatchStatus {
@@ -552,6 +554,7 @@ model InventoryEquipment {
   corporateLines          InventoryCorporateLine[]        @relation("InventoryCorporateLineEquipment")
   corporateLineEventsFrom InventoryCorporateLineHistory[] @relation("InventoryCorporateLineHistoryFromEquipment")
   corporateLineEventsTo   InventoryCorporateLineHistory[] @relation("InventoryCorporateLineHistoryToEquipment")
+  collectorCommands       CollectorCommand[]
 
   @@unique([portalId, patrimony])
   @@unique([portalId, legacySource, legacyId])
@@ -927,4 +930,40 @@ model InventoryImportRun {
   @@unique([portalId, source, rawSha256])
   @@index([portalId, status, startedAt])
   @@map("inventory_import_runs")
+}
+
+/// Comando enviado pelo inventário para ser executado no PC pelo agente coletor.
+/// O agente consulta comandos PENDING, executa e marca como DONE/FAILED.
+model CollectorCommand {
+  id       String       @id @default(cuid())
+  portalId String
+  portal   BitrixPortal @relation(fields: [portalId], references: [id], onDelete: Restrict)
+
+  /// Equipamento alvo para rastreabilidade
+  equipmentId String?
+  equipment   InventoryEquipment? @relation(fields: [equipmentId], references: [id], onDelete: SetNull)
+
+  /// Identificadores usados pelo agente para se reconhecer como alvo
+  targetSerial String?
+  targetName   String?
+
+  /// Tipo do comando: SET_WALLPAPER | SHOW_MESSAGE | MAP_DRIVE
+  command String
+
+  /// Parâmetros do comando (estrutura depende do tipo)
+  params Json @default("{}")
+
+  /// Ciclo de vida: PENDING → SENT → DONE | FAILED
+  status String @default("PENDING")
+  result String?
+
+  createdBy String?
+  createdAt DateTime  @default(now())
+  sentAt    DateTime?
+  doneAt    DateTime?
+
+  @@index([portalId, targetSerial, status])
+  @@index([portalId, targetName, status])
+  @@index([portalId, equipmentId, createdAt])
+  @@map("collector_commands")
 }

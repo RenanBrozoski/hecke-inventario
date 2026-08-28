@@ -81,7 +81,7 @@ function asJsonRecord(value: unknown): JsonRecord {
 }
 
 function isValueEmpty(value: unknown): boolean {
-  return value === undefined || value === null || value === ''
+  return value === undefined || value === null || value === '' || (Array.isArray(value) && value.length === 0)
 }
 
 function isValidFieldValue(field: DynamicField, value: unknown): boolean {
@@ -113,6 +113,20 @@ function isValidFieldValue(field: DynamicField, value: unknown): boolean {
       )
     case 'PASSWORD':
       return false
+    case 'RAM':
+      return (
+        Array.isArray(value) &&
+        value.length > 0 &&
+        value.every(
+          (slot) =>
+            typeof slot === 'object' &&
+            slot !== null &&
+            typeof (slot as { qty?: unknown }).qty === 'number' &&
+            typeof (slot as { gb?: unknown }).gb === 'number' &&
+            (slot as { qty: number }).qty > 0 &&
+            (slot as { gb: number }).gb > 0,
+        )
+      )
   }
 }
 

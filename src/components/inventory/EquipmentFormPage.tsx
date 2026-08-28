@@ -444,6 +444,81 @@ function Field({
   )
 }
 
+interface RamSlot { qty: number; gb: number }
+
+function parseRam(value: unknown): RamSlot[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .filter(
+      (v): v is RamSlot =>
+        typeof v === 'object' && v !== null && 'qty' in v && 'gb' in v,
+    )
+    .map((v) => ({ qty: Number(v.qty), gb: Number(v.gb) }))
+    .filter((v) => v.qty > 0 && v.gb > 0)
+}
+
+function RamInput({ label, value, onChange }: { label: string; value: unknown; onChange: (v: unknown) => void }) {
+  const [slots, setSlots] = useState<RamSlot[]>(() => {
+    const parsed = parseRam(value)
+    return parsed.length ? parsed : [{ qty: 1, gb: 8 }]
+  })
+
+  function update(next: RamSlot[]) {
+    setSlots(next)
+    const valid = next.filter((s) => s.qty > 0 && s.gb > 0)
+    onChange(valid.length ? valid : null)
+  }
+
+  function setSlot(i: number, field: keyof RamSlot, val: number) {
+    update(slots.map((s, idx) => (idx === i ? { ...s, [field]: val } : s)))
+  }
+
+  const total = slots.reduce((sum, s) => sum + s.qty * s.gb, 0)
+
+  return (
+    <div className={styles.field}>
+      <span className={styles.fieldLabel}>{label}</span>
+      {slots.map((slot, i) => (
+        <div key={i} style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', marginBottom: '0.35rem' }}>
+          <input
+            type="number"
+            min="1"
+            max="128"
+            value={slot.qty}
+            onChange={(e) => setSlot(i, 'qty', Number(e.target.value))}
+            style={{ width: '4rem' }}
+            aria-label="Quantidade"
+          />
+          <span>×</span>
+          <input
+            type="number"
+            min="1"
+            max="1024"
+            value={slot.gb}
+            onChange={(e) => setSlot(i, 'gb', Number(e.target.value))}
+            style={{ width: '5rem' }}
+            aria-label="GB"
+          />
+          <span>GB</span>
+          {slots.length > 1 && (
+            <button type="button" onClick={() => update(slots.filter((_, idx) => idx !== i))}>
+              Remover
+            </button>
+          )}
+        </div>
+      ))}
+      {total > 0 && (
+        <p style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', margin: '0.1rem 0 0.3rem' }}>
+          Total: {total}GB
+        </p>
+      )}
+      <button type="button" onClick={() => update([...slots, { qty: 1, gb: 8 }])} style={{ fontSize: '0.82rem' }}>
+        + Pente
+      </button>
+    </div>
+  )
+}
+
 function SpecField({
   field,
   value,
@@ -453,6 +528,9 @@ function SpecField({
   value: unknown
   onChange: (value: unknown) => void
 }) {
+  if (field.type === 'RAM') {
+    return <RamInput label={field.label} value={value} onChange={onChange} />
+  }
   if (field.type === 'PASSWORD') {
     return (
       <div className={styles.field}>
@@ -539,6 +617,9 @@ function normalizeSpecs(
       if (Number.isFinite(number)) normalized[field.key] = number
     } else if (field.type === 'BOOLEAN') {
       normalized[field.key] = value === true || value === 'true' || value === '1' || value === 'Sim'
+    } else if (field.type === 'RAM') {
+      const slots = parseRam(value)
+      if (slots.length) normalized[field.key] = slots
     } else {
       normalized[field.key] = value
     }

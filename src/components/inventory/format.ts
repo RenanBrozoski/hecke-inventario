@@ -34,6 +34,7 @@ export const FIELD_TYPE_LABELS: Record<FieldType, string> = {
   PASSWORD: 'Senha (não migrada)',
   MAC: 'Endereço MAC',
   IP: 'Endereço IP',
+  RAM: 'Memória RAM (pentes)',
 }
 
 export function statusTone(

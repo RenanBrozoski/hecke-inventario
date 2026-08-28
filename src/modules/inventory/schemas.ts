@@ -433,6 +433,7 @@ export const updateCustomRecordSchema = customRecordSchema
 
 export const secondaryListQuerySchema = paginationQuerySchema.extend({
   archived: z.enum(['exclude', 'include', 'only']).default('exclude'),
+  activeFilter: z.enum(['active', 'inactive']).optional(),
 })
 
 export type CreateEquipmentInput = z.infer<typeof createEquipmentSchema>
