@@ -9,24 +9,30 @@ export type BitrixUser = {
 
 const WEBHOOK = process.env.BITRIX24_WEBHOOK_URL?.replace(/\/$/, '')
 
-async function call<T>(method: string, params: Record<string, string> = {}): Promise<T> {
+async function post<T>(method: string, params: Record<string, unknown> = {}): Promise<T> {
   if (!WEBHOOK) throw new Error('BITRIX24_WEBHOOK_URL não configurado')
-  const url = new URL(`${WEBHOOK}/${method}.json`)
-  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v)
-  const res = await fetch(url, { cache: 'no-store' })
+  const res = await fetch(`${WEBHOOK}/${method}.json`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+    cache: 'no-store',
+  })
   if (!res.ok) throw new Error(`Bitrix24 ${method}: HTTP ${res.status}`)
-  const json = (await res.json()) as { result: T; error?: string }
-  if (json.error) throw new Error(`Bitrix24: ${json.error}`)
+  const json = (await res.json()) as { result: T; error?: string; error_description?: string }
+  if (json.error) throw new Error(`Bitrix24: ${json.error} — ${json.error_description ?? ''}`)
   return json.result
 }
 
 export async function searchBitrixUsers(query: string): Promise<BitrixUser[]> {
-  const result = await call<BitrixUser[]>('user.search', { FIND: query })
+  // user.get com FILTER[FIND] faz busca parcial por nome, sobrenome e e-mail
+  const result = await post<BitrixUser[]>('user.get', {
+    FILTER: { FIND: query, ACTIVE: true },
+  })
   if (!Array.isArray(result)) return []
-  return result.filter((u) => u.ACTIVE !== false)
+  return result.slice(0, 20) // limita para não sobrecarregar o dropdown
 }
 
 export async function getBitrixUser(id: string): Promise<BitrixUser | null> {
-  const result = await call<BitrixUser[]>('user.get', { ID: id })
+  const result = await post<BitrixUser[]>('user.get', { FILTER: { ID: id } })
   return Array.isArray(result) && result.length > 0 ? (result[0] ?? null) : null
 }
