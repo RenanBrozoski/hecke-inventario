@@ -42,7 +42,12 @@ function PersonFormContent({
     employmentType: '',
     status: 'ACTIVE' as PersonStatus,
     notes: '',
+    bitrixUserId: '' as string | null,
   })
+  const [bitrixSearch, setBitrixSearch] = useState('')
+  const [bitrixResults, setBitrixResults] = useState<{ id: string; name: string; email: string }[]>([])
+  const [bitrixSearching, setBitrixSearching] = useState(false)
+  const [bitrixDisplayName, setBitrixDisplayName] = useState('')
   const [loading, setLoading] = useState(true)
   const [revision, setRevision] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
@@ -74,7 +79,9 @@ function PersonFormContent({
           employmentType: person.employmentType ?? '',
           status: person.status,
           notes: person.notes ?? '',
+          bitrixUserId: person.bitrixUserId ?? null,
         })
+        if (person.bitrixUserId) setBitrixDisplayName(`#${person.bitrixUserId}`)
       }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Falha ao carregar o formulário.')
@@ -109,6 +116,7 @@ function PersonFormContent({
             employmentType: form.employmentType || null,
             status: form.status,
             notes: nullable(form.notes),
+            bitrixUserId: form.bitrixUserId || null,
           }),
         },
       )
@@ -218,6 +226,73 @@ function PersonFormContent({
                 </option>
               ))}
             </select>
+          </Field>
+          <Field label="Usuário Bitrix24">
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+              {form.bitrixUserId ? (
+                <>
+                  <span style={{ fontSize: '0.85rem' }}>
+                    {bitrixDisplayName || `#${form.bitrixUserId}`}
+                  </span>
+                  <button
+                    type="button"
+                    style={{ fontSize: '0.75rem', padding: '0.15rem 0.5rem' }}
+                    onClick={() => {
+                      setForm({ ...form, bitrixUserId: null })
+                      setBitrixDisplayName('')
+                      setBitrixSearch('')
+                      setBitrixResults([])
+                    }}
+                  >
+                    Desvincular
+                  </button>
+                </>
+              ) : (
+                <div style={{ position: 'relative', flex: 1 }}>
+                  <input
+                    placeholder="Buscar por nome ou e-mail…"
+                    value={bitrixSearch}
+                    onChange={(e) => {
+                      const q = e.target.value
+                      setBitrixSearch(q)
+                      setBitrixResults([])
+                      if (q.trim().length < 2) return
+                      setBitrixSearching(true)
+                      const timer = setTimeout(() => {
+                        authorizedFetch(`/api/inventory/bitrix-users?q=${encodeURIComponent(q.trim())}`)
+                          .then((r) => r.json())
+                          .then((data: unknown) => {
+                            if (Array.isArray(data)) setBitrixResults(data as { id: string; name: string; email: string }[])
+                          })
+                          .catch(() => undefined)
+                          .finally(() => setBitrixSearching(false))
+                      }, 300)
+                      return () => clearTimeout(timer)
+                    }}
+                  />
+                  {bitrixSearching && <span style={{ fontSize: '0.75rem', marginLeft: '0.5rem' }}>Buscando…</span>}
+                  {bitrixResults.length > 0 && (
+                    <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 4, zIndex: 10, maxHeight: 200, overflowY: 'auto' }}>
+                      {bitrixResults.map((u) => (
+                        <div
+                          key={u.id}
+                          style={{ padding: '0.4rem 0.6rem', cursor: 'pointer', fontSize: '0.85rem' }}
+                          onMouseDown={() => {
+                            setForm({ ...form, bitrixUserId: u.id })
+                            setBitrixDisplayName(`${u.name} (${u.email || '#' + u.id})`)
+                            setBitrixSearch('')
+                            setBitrixResults([])
+                          }}
+                        >
+                          <strong>{u.name}</strong>
+                          {u.email && <span style={{ marginLeft: '0.5rem', color: 'var(--color-text-muted)' }}>{u.email}</span>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </Field>
           <div className={styles.spanTwo}>
             <Field label="Observações">
