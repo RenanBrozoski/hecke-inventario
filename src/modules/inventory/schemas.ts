@@ -3,6 +3,7 @@ import {
   InventoryCorporateLineStatus,
   InventoryEquipmentStatus,
   InventoryFieldType,
+  InventoryMatchStatus,
   InventoryPersonStatus,
   InventoryRole,
   InventoryTermType,
@@ -167,6 +168,8 @@ export const bulkTransferSchema = z
 export const peopleListQuerySchema = paginationQuerySchema.extend({
   status: z.nativeEnum(InventoryPersonStatus).optional(),
   departmentId: id.optional(),
+  employmentType: z.nativeEnum(InventoryEmploymentType).optional(),
+  bitrixMatchStatus: z.nativeEnum(InventoryMatchStatus).optional(),
   archived: z.enum(['exclude', 'include', 'only']).default('exclude'),
 })
 

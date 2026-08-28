@@ -1147,6 +1147,8 @@ export async function listPeople(
     q?: string
     status?: Prisma.EnumInventoryPersonStatusFilter['equals']
     departmentId?: string
+    employmentType?: Prisma.EnumInventoryEmploymentTypeFilter['equals']
+    bitrixMatchStatus?: Prisma.EnumInventoryMatchStatusFilter['equals']
     archived: 'exclude' | 'include' | 'only'
   },
 ) {
@@ -1156,6 +1158,8 @@ export async function listPeople(
     ...(query.archived === 'only' ? { archivedAt: { not: null } } : {}),
     ...(query.status ? { status: query.status } : {}),
     ...(query.departmentId ? { departmentId: query.departmentId } : {}),
+    ...(query.employmentType ? { employmentType: query.employmentType } : {}),
+    ...(query.bitrixMatchStatus ? { bitrixMatchStatus: query.bitrixMatchStatus } : {}),
     ...(query.q
       ? {
           OR: [
@@ -1163,6 +1167,7 @@ export async function listPeople(
             { email: { contains: query.q, mode: 'insensitive' } },
             { employeeNumber: { contains: query.q, mode: 'insensitive' } },
             { title: { contains: query.q, mode: 'insensitive' } },
+            { cpf: { contains: query.q, mode: 'insensitive' } },
           ],
         }
       : {}),

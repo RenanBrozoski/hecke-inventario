@@ -16,12 +16,25 @@ export function PeopleListPage() {
   return <InventoryGate>{(context) => <PeopleListContent context={context} />}</InventoryGate>
 }
 
+const BITRIX_STATUS_LABELS: Record<string, string> = {
+  MATCHED: 'Vinculado',
+  UNMATCHED: 'Não vinculado',
+  UNREVIEWED: 'Não revisado',
+  AMBIGUOUS: 'Ambíguo',
+  REJECTED: 'Rejeitado',
+}
+
 function PeopleListContent({ context }: { context: InventoryContextResponse }) {
   const { authorizedFetch } = useSession()
   const [q, setQ] = useState('')
   const [status, setStatus] = useState('')
   const [departmentId, setDepartmentId] = useState('')
-  const [applied, setApplied] = useState({ q: '', status: '', departmentId: '' })
+  const [employmentType, setEmploymentType] = useState('')
+  const [bitrixMatchStatus, setBitrixMatchStatus] = useState('')
+  const [pageSize, setPageSize] = useState('50')
+  const [applied, setApplied] = useState({
+    q: '', status: '', departmentId: '', employmentType: '', bitrixMatchStatus: '',
+  })
   const [page, setPage] = useState(1)
   const [data, setData] = useState<PeopleListResponse | null>(null)
   const [lookups, setLookups] = useState<InventoryLookupsResponse | null>(null)
@@ -32,39 +45,51 @@ function PeopleListContent({ context }: { context: InventoryContextResponse }) {
     setLoading(true)
     setError(null)
     try {
-      const params = new URLSearchParams({ page: String(page), pageSize: '25' })
+      const params = new URLSearchParams({ page: String(page), pageSize })
       for (const [key, value] of Object.entries(applied)) if (value) params.set(key, value)
       const [peopleResponse, lookupResponse] = await Promise.all([
         authorizedFetch(`/api/inventory/people?${params}`),
-        authorizedFetch('/api/inventory/lookups'),
+        lookups ? Promise.resolve(null) : authorizedFetch('/api/inventory/lookups'),
       ])
       if (!peopleResponse.ok)
-        throw new Error(
-          await readApiError(peopleResponse, 'Não foi possível carregar os colaboradores.'),
-        )
-      if (!lookupResponse.ok)
-        throw new Error(await readApiError(lookupResponse, 'Não foi possível carregar os setores.'))
+        throw new Error(await readApiError(peopleResponse, 'Não foi possível carregar os colaboradores.'))
       setData((await peopleResponse.json()) as PeopleListResponse)
-      setLookups((await lookupResponse.json()) as InventoryLookupsResponse)
+      if (lookupResponse) {
+        if (!lookupResponse.ok)
+          throw new Error(await readApiError(lookupResponse, 'Não foi possível carregar os setores.'))
+        setLookups((await lookupResponse.json()) as InventoryLookupsResponse)
+      }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Falha ao carregar os colaboradores.')
     } finally {
       setLoading(false)
     }
-  }, [applied, authorizedFetch, page])
+  }, [applied, authorizedFetch, page, pageSize, lookups])
 
   useEffect(() => {
     void load()
-  }, [load])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, applied, pageSize])
 
-  function filter(event: FormEvent) {
+  useEffect(() => {
+    // carrega lookups uma vez
+    if (!lookups) void load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  function applyFilter(event: FormEvent) {
     event.preventDefault()
     setPage(1)
-    setApplied({ q, status, departmentId })
+    setApplied({ q, status, departmentId, employmentType, bitrixMatchStatus })
   }
 
-  const totalPages =
-    data?.totalPages ?? Math.max(1, Math.ceil((data?.total ?? 0) / (data?.pageSize ?? 25)))
+  function clearFilter() {
+    setQ(''); setStatus(''); setDepartmentId(''); setEmploymentType(''); setBitrixMatchStatus('')
+    setApplied({ q: '', status: '', departmentId: '', employmentType: '', bitrixMatchStatus: '' })
+    setPage(1)
+  }
+
+  const totalPages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1
 
   return (
     <div>
@@ -72,77 +97,76 @@ function PeopleListContent({ context }: { context: InventoryContextResponse }) {
         <div>
           <h1>Colaboradores</h1>
           <p className={styles.subtitle}>
-            {data
-              ? `${data.total} pessoa(s) encontrada(s)`
-              : 'Responsáveis e histórico de custódia'}
+            {data ? `${data.total} pessoa(s) encontrada(s)` : 'Responsáveis e histórico de custódia'}
           </p>
         </div>
         {context.canEdit && (
           <Link href="/inventory/people/new">
-            <button type="button" className="primary">
-              + Novo colaborador
-            </button>
+            <button type="button" className="primary">+ Novo colaborador</button>
           </Link>
         )}
       </header>
-      <form className={styles.filters} onSubmit={filter}>
+
+      <form className={styles.filters} onSubmit={applyFilter}>
         <div className={styles.field}>
           <label htmlFor="people-q">Buscar</label>
           <input
             id="people-q"
             value={q}
-            onChange={(event) => setQ(event.target.value)}
-            placeholder="Nome, e-mail, cargo ou matrícula"
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Nome, e-mail, CPF, cargo ou matrícula"
           />
         </div>
         <div className={styles.field}>
           <label htmlFor="people-status">Situação</label>
-          <select
-            id="people-status"
-            value={status}
-            onChange={(event) => setStatus(event.target.value)}
-          >
+          <select id="people-status" value={status} onChange={(e) => setStatus(e.target.value)}>
             <option value="">Todas</option>
-            {Object.entries(PERSON_STATUS_LABELS).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
+            {Object.entries(PERSON_STATUS_LABELS).map(([v, l]) => (
+              <option key={v} value={v}>{l}</option>
             ))}
           </select>
         </div>
         <div className={styles.field}>
-          <label htmlFor="people-department">Setor</label>
-          <select
-            id="people-department"
-            value={departmentId}
-            onChange={(event) => setDepartmentId(event.target.value)}
-          >
+          <label htmlFor="people-dept">Setor</label>
+          <select id="people-dept" value={departmentId} onChange={(e) => setDepartmentId(e.target.value)}>
             <option value="">Todos</option>
-            {lookups?.departments.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.name}
-              </option>
+            {lookups?.departments.map((d) => (
+              <option key={d.id} value={d.id}>{d.name}</option>
             ))}
           </select>
         </div>
+        <div className={styles.field}>
+          <label htmlFor="people-emp">Vínculo</label>
+          <select id="people-emp" value={employmentType} onChange={(e) => setEmploymentType(e.target.value)}>
+            <option value="">Todos</option>
+            {Object.entries(EMPLOYMENT_TYPE_LABELS).map(([v, l]) => (
+              <option key={v} value={v}>{l}</option>
+            ))}
+          </select>
+        </div>
+        <div className={styles.field}>
+          <label htmlFor="people-bitrix">Bitrix24</label>
+          <select id="people-bitrix" value={bitrixMatchStatus} onChange={(e) => setBitrixMatchStatus(e.target.value)}>
+            <option value="">Todos</option>
+            <option value="MATCHED">Vinculado</option>
+            <option value="UNREVIEWED">Não revisado</option>
+            <option value="UNMATCHED">Não vinculado</option>
+          </select>
+        </div>
+        <div className={styles.field}>
+          <label htmlFor="people-ps">Por página</label>
+          <select id="people-ps" value={pageSize} onChange={(e) => { setPageSize(e.target.value); setPage(1) }}>
+            <option value="25">25</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+          </select>
+        </div>
         <div className={styles.actions}>
-          <button type="submit" className="primary">
-            Filtrar
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setQ('')
-              setStatus('')
-              setDepartmentId('')
-              setApplied({ q: '', status: '', departmentId: '' })
-              setPage(1)
-            }}
-          >
-            Limpar
-          </button>
+          <button type="submit" className="primary">Filtrar</button>
+          <button type="button" onClick={clearFilter}>Limpar</button>
         </div>
       </form>
+
       {error && <p className="alert alert-error">{error}</p>}
       {loading && <p className={styles.loading}>Carregando colaboradores…</p>}
       {!loading && data?.items.length === 0 && (
@@ -159,38 +183,45 @@ function PeopleListContent({ context }: { context: InventoryContextResponse }) {
                   <th>Situação</th>
                   <th>Vínculo</th>
                   <th>Equipamentos</th>
-                  <th>Bitrix</th>
+                  <th>Bitrix24</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
                 {data.items.map((person) => {
                   const tone = statusTone(person.status)
+                  const isLinked = person.bitrixMatchStatus === 'MATCHED'
                   return (
                     <tr key={person.id}>
                       <td>
-                        <Link href={`/inventory/people/${person.id}`}>{person.name}</Link>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                          {isLinked && (
+                            <span
+                              title={`Bitrix24 #${person.bitrixUserId ?? ''}`}
+                              style={{ fontSize: '0.65rem', background: '#22c55e', color: '#fff', borderRadius: 3, padding: '0 4px', lineHeight: '1.6', flexShrink: 0 }}
+                            >
+                              B24
+                            </span>
+                          )}
+                          <Link href={`/inventory/people/${person.id}`}>{person.name}</Link>
+                        </div>
                         {person.title && <div className={styles.timelineMeta}>{person.title}</div>}
                       </td>
                       <td>{person.department?.name ?? '—'}</td>
                       <td>
-                        <span
-                          className={`${styles.badge} ${tone === 'neutral' ? '' : styles[tone]}`}
-                        >
+                        <span className={`${styles.badge} ${tone === 'neutral' ? '' : styles[tone]}`}>
                           {PERSON_STATUS_LABELS[person.status]}
                         </span>
                       </td>
-                      <td>
-                        {person.employmentType
-                          ? EMPLOYMENT_TYPE_LABELS[person.employmentType]
-                          : '—'}
-                      </td>
+                      <td>{person.employmentType ? EMPLOYMENT_TYPE_LABELS[person.employmentType] : '—'}</td>
                       <td>{person._count?.equipment ?? 0}</td>
                       <td>
-                        {person.bitrixMatchStatus === 'MATCHED' ? (
+                        {isLinked ? (
                           <span className={`${styles.badge} ${styles.success}`}>Vinculado</span>
                         ) : (
-                          <span className={styles.badge}>Não vinculado</span>
+                          <span className={styles.badge} style={{ opacity: 0.6 }}>
+                            {BITRIX_STATUS_LABELS[person.bitrixMatchStatus ?? 'UNREVIEWED'] ?? 'Não revisado'}
+                          </span>
                         )}
                       </td>
                       <td>
@@ -203,22 +234,12 @@ function PeopleListContent({ context }: { context: InventoryContextResponse }) {
             </table>
           </div>
           <div className={styles.pagination}>
-            <span>
-              Página {data.page} de {totalPages} · {data.total} registro(s)
-            </span>
+            <span>Página {data.page} de {totalPages} · {data.total} registro(s)</span>
             <div className={styles.paginationActions}>
-              <button
-                type="button"
-                disabled={page <= 1}
-                onClick={() => setPage((value) => Math.max(1, value - 1))}
-              >
+              <button type="button" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
                 Anterior
               </button>
-              <button
-                type="button"
-                disabled={page >= totalPages}
-                onClick={() => setPage((value) => value + 1)}
-              >
+              <button type="button" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
                 Próxima
               </button>
             </div>
