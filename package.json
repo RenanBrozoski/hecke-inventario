@@ -38,6 +38,7 @@
     "bpmn-js": "^18.24.0",
     "bpmn-js-properties-panel": "^5.64.0",
     "bpmn-moddle": "^10.1.0",
+    "docx": "^9.7.1",
     "inngest": "^3.27.3",
     "jose": "^5.9.6",
     "next": "^15.1.4",
