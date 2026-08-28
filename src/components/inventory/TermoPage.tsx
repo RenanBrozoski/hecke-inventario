@@ -269,7 +269,6 @@ function TermoContent({
           employerRole={employerRole}
           employeeRole={employeeRole}
           contractLabel={contractLabel}
-          isPJ={isPJ}
           extraEquipment={extraEquipment}
         />
       </div>
@@ -347,7 +346,6 @@ function TermoDocument({
   employerRole,
   employeeRole,
   contractLabel,
-  isPJ,
   extraEquipment,
 }: {
   person: PersonDetail
@@ -357,7 +355,6 @@ function TermoDocument({
   employerRole: string
   employeeRole: string
   contractLabel: string
-  isPJ: boolean
   extraEquipment: ExtraEq[]
 }) {
   const employmentLabel = person.employmentType
