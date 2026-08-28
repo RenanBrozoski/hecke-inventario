@@ -318,9 +318,13 @@ function buildDocx(opts: {
     ? `O presente termo tem por objeto a cessão, em caráter gratuito e temporário, de bens da ${employerRole} ao ${employeeRole} para fins exclusivamente profissionais, conforme quadro abaixo:`
     : `O presente instrumento tem por objeto a cessão, em caráter gratuito e temporário, de bens da ${employerRole} ao ${employeeRole} para o exercício de suas atividades profissionais.`
 
-  const clauseSegunda = isPJ
-    ? `O ${employeeRole} compromete-se a utilizar os equipamentos de forma exclusiva para a execução dos serviços profissionais, sendo responsável pela guarda, conservação e devolução dos itens em perfeito estado de funcionamento. É vedada a cessão, empréstimo, aluguel ou transferência dos equipamentos a terceiros, mesmo que integrantes da equipe do ${employeeRole}, sem autorização expressa da ${employerRole}.`
-    : `O ${employeeRole} compromete-se a utilizar os equipamentos exclusivamente para fins profissionais, responsabilizando-se pela guarda, conservação e devolução em perfeito estado de funcionamento. É vedada a cessão, empréstimo ou transferência dos equipamentos a terceiros.`
+  const clauseSegundaP1 = isPJ
+    ? `O ${employeeRole} compromete-se a utilizar os equipamentos de forma exclusiva para a execução dos serviços profissionais, sendo responsável pela guarda, conservação e devolução dos itens em perfeito estado de funcionamento.`
+    : `O ${employeeRole} compromete-se a utilizar os equipamentos exclusivamente para fins profissionais, responsabilizando-se pela guarda, conservação e devolução em perfeito estado de funcionamento.`
+
+  const clauseSegundaP2 = isPJ
+    ? `É vedada a cessão, empréstimo, aluguel ou transferência dos equipamentos a terceiros, mesmo que integrantes da equipe do ${employeeRole}, sem autorização expressa da ${employerRole}.`
+    : `É vedada a cessão, empréstimo ou transferência dos equipamentos a terceiros.`
 
   const clauseTerceiraIntro = isPJ ? `O ${employeeRole} se compromete a:` : `O ${employeeRole} compromete-se a:`
   const clauseTerceiraItems = isPJ ? [
@@ -376,7 +380,10 @@ function buildDocx(opts: {
     ? 'Este termo entra em vigor na data de sua assinatura e é celebrado em duas vias de igual teor e forma, permanecendo uma com cada parte.'
     : 'O presente termo entra em vigor na data de sua assinatura e é celebrado em duas vias de igual teor, ficando uma via com cada parte.'
 
-  const dateText = isPJ ? `Em ______ de ______________________ de 202___.` : `Curitiba/PR, ______, de ______________________, de 2026.`
+  // PJ_HECKE usa formato "Em ____"; CLT e PJ_MarketMove usam formato "Curitiba/PR"
+  const dateText = (isPJ && !isMarketMove)
+    ? `Em ____ de ______________ de 2026.`
+    : `Curitiba/PR, ______, de _________________, de 2026`
 
   // ── Assemble document ─────────────────────────────────────────────────────
   const children = [
@@ -400,7 +407,8 @@ function buildDocx(opts: {
     spacer(),
 
     clauseTitle(`Cláusula Segunda – DA RESPONSABILIDADE DO ${employeeRole}`),
-    para([clauseSegunda]),
+    para([clauseSegundaP1]),
+    para([clauseSegundaP2]),
 
     clauseTitle('Cláusula Terceira – DO USO E DAS RESTRIÇÕES'),
     para([clauseTerceiraIntro]),

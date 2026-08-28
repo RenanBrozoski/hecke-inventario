@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { useSession } from '@/src/components/session/SessionProvider'
-import { EMPLOYMENT_TYPE_LABELS, EQUIPMENT_STATUS_LABELS } from './format'
+import { EQUIPMENT_STATUS_LABELS } from './format'
 import { InventoryGate } from './InventoryGate'
 import type { EquipmentSummary, InventoryContextResponse, PersonDetail } from './types'
 import styles from './inventory.module.css'
@@ -269,6 +269,12 @@ function TermoContent({
           employerRole={employerRole}
           employeeRole={employeeRole}
           contractLabel={contractLabel}
+          isPJ={isPJ}
+          cpf={cpf}
+          companyName={companyName}
+          companyCnpj={companyCnpj}
+          representativeName={representativeName}
+          representativeCpf={representativeCpf}
           extraEquipment={extraEquipment}
         />
       </div>
@@ -346,6 +352,12 @@ function TermoDocument({
   employerRole,
   employeeRole,
   contractLabel,
+  isPJ,
+  cpf,
+  companyName,
+  companyCnpj,
+  representativeName,
+  representativeCpf,
   extraEquipment,
 }: {
   person: PersonDetail
@@ -355,12 +367,14 @@ function TermoDocument({
   employerRole: string
   employeeRole: string
   contractLabel: string
+  isPJ: boolean
+  cpf: string
+  companyName: string
+  companyCnpj: string
+  representativeName: string
+  representativeCpf: string
   extraEquipment: ExtraEq[]
 }) {
-  const employmentLabel = person.employmentType
-    ? EMPLOYMENT_TYPE_LABELS[person.employmentType]
-    : null
-
   const allEquipment = [
     ...equipment.map((eq, i) => ({
       num: i + 1,
@@ -398,13 +412,25 @@ function TermoDocument({
         inscrita no CNPJ sob nº <strong>{employer.cnpj}</strong>, adiante denominado
         simplesmente <em>{employerRole}</em>, e
       </p>
-      <p className={styles.termoParagraph}>
-        <strong>{person.name.toUpperCase()}</strong>
-        {person.title ? `, ${person.title}` : ''}
-        {person.department ? `, setor ${person.department.name}` : ''}
-        {employmentLabel ? ` (${employmentLabel})` : ''}
-        , doravante simplesmente designado <em>{employeeRole}</em>.
-      </p>
+      {isPJ ? (
+        <p className={styles.termoParagraph}>
+          <strong>{companyName ? companyName.toUpperCase() : '[NOME DA EMPRESA]'}</strong>
+          {', pessoa jurídica de direito privado, inscrita no CNPJ sob nº '}
+          {companyCnpj || '[CNPJ]'}
+          {', neste ato representada pela sua representante legal, '}
+          {representativeName || '[REPRESENTANTE]'}
+          {representativeCpf ? `, inscrita no CPF sob n.º ${representativeCpf}` : ''}
+          {'. doravante denominada, simplesmente, como '}
+          <em>{employeeRole}</em>{'.'}
+        </p>
+      ) : (
+        <p className={styles.termoParagraph}>
+          <strong>{person.name.toUpperCase()}</strong>
+          {cpf ? `, inscrito no CPF sob nº ${cpf}` : ''}
+          {', doravante simplesmente designado '}
+          <em>{employeeRole}</em>{'.'}
+        </p>
+      )}
 
       {/* Considerando */}
       <p className={styles.termoParagraph}>Considerando que:</p>
@@ -485,12 +511,30 @@ function TermoDocument({
       <p className={styles.termoClause}>
         <strong>Cláusula Segunda – DA RESPONSABILIDADE DO {employeeRole}</strong>
       </p>
-      <p className={styles.termoParagraph}>
-        O <em>{employeeRole}</em> compromete-se a utilizar os equipamentos exclusivamente para fins
-        profissionais, responsabilizando-se pela guarda, conservação e devolução em perfeito
-        estado de funcionamento. É vedada a cessão, empréstimo ou transferência dos equipamentos
-        a terceiros.
-      </p>
+      {isPJ ? (
+        <>
+          <p className={styles.termoParagraph}>
+            O <em>{employeeRole}</em> compromete-se a utilizar os equipamentos de forma exclusiva para a
+            execução dos serviços profissionais, sendo responsável pela guarda, conservação e devolução
+            dos itens em perfeito estado de funcionamento.
+          </p>
+          <p className={styles.termoParagraph}>
+            É vedada a cessão, empréstimo, aluguel ou transferência dos equipamentos a terceiros, mesmo
+            que integrantes da equipe do <em>{employeeRole}</em>, sem autorização expressa da <em>{employerRole}</em>.
+          </p>
+        </>
+      ) : (
+        <>
+          <p className={styles.termoParagraph}>
+            O <em>{employeeRole}</em> compromete-se a utilizar os equipamentos exclusivamente para fins
+            profissionais, responsabilizando-se pela guarda, conservação e devolução em perfeito estado
+            de funcionamento.
+          </p>
+          <p className={styles.termoParagraph}>
+            É vedada a cessão, empréstimo ou transferência dos equipamentos a terceiros.
+          </p>
+        </>
+      )}
 
       <p className={styles.termoClause}>
         <strong>Cláusula Terceira – DO USO E DAS RESTRIÇÕES</strong>
