@@ -107,16 +107,21 @@ function PersonDetailContent({
             </span>
           </p>
         </div>
-        {context.canEdit && (
-          <div className={styles.actions}>
-            <Link href={`/inventory/people/${person.id}/edit`}>
-              <button type="button">Editar</button>
-            </Link>
-            <button type="button" disabled={archiving} onClick={() => void archive()}>
-              {archiving ? 'Arquivando…' : 'Arquivar'}
-            </button>
-          </div>
-        )}
+        <div className={styles.actions}>
+          <Link href={`/inventory/people/${person.id}/termo`}>
+            <button type="button">Gerar Termo</button>
+          </Link>
+          {context.canEdit && (
+            <>
+              <Link href={`/inventory/people/${person.id}/edit`}>
+                <button type="button">Editar</button>
+              </Link>
+              <button type="button" disabled={archiving} onClick={() => void archive()}>
+                {archiving ? 'Arquivando…' : 'Arquivar'}
+              </button>
+            </>
+          )}
+        </div>
       </header>
       <div className={styles.twoColumns}>
         <section className={styles.card}>
