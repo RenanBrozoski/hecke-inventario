@@ -59,19 +59,11 @@ export async function POST(request: Request, route: RouteContext) {
 
     const employerRole = isPJ ? 'CONTRATANTE' : 'EMPREGADOR'
     const employeeRole = isPJ ? 'CONTRATADO' : 'EMPREGADO'
-    const contractLabel = isPJ ? 'contrato de prestação de serviços' : 'contrato de trabalho'
-
-    const today = new Date().toLocaleDateString('pt-BR', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-    })
 
     const doc = buildDocx({
       employer,
       employerRole,
       employeeRole,
-      contractLabel,
       isPJ,
       person: person as {
         name: string
@@ -93,7 +85,6 @@ export async function POST(request: Request, route: RouteContext) {
         status: string
       }>,
       extraEquipment: body.extraEquipment ?? [],
-      today,
     })
 
     const buffer = await Packer.toBuffer(doc)
@@ -161,7 +152,6 @@ function buildDocx(opts: {
   employer: { name: string; cnpj: string }
   employerRole: string
   employeeRole: string
-  contractLabel: string
   isPJ: boolean
   person: { name: string; title?: string | null; department?: { name: string } | null; employmentType?: string | null }
   cpf?: string
@@ -178,12 +168,11 @@ function buildDocx(opts: {
     status: string
   }>
   extraEquipment: Array<{ category: string; description: string; patrimony: string; serialNumber: string }>
-  today: string
 }) {
   const {
-    employer, employerRole, employeeRole, contractLabel, isPJ,
+    employer, employerRole, employeeRole, isPJ,
     person, cpf, companyName, companyCnpj, representativeName, representativeCpf,
-    equipment, extraEquipment, today,
+    equipment, extraEquipment,
   } = opts
 
   // ── Equipment table (4 cols: ITEM | MARCA/MODELO | N/S/ID/IMEI | CHECK) ──
@@ -200,24 +189,21 @@ function buildDocx(opts: {
     })),
   ]
 
-  const colW = [30, 40, 22, 8] // % widths
-  const mkCell = (text: string, bold = false, center = false) =>
+  const W = { item: 30, modelo: 40, ns: 22, chk: 8 } as const
+  const tc = (text: string, w: number, b = false, center = false) =>
     new TableCell({
-      children: [new Paragraph({
-        children: [new TextRun({ text, bold, size: 18 })],
-        alignment: center ? AlignmentType.CENTER : AlignmentType.LEFT,
-      })],
-      width: { size: colW[0], type: WidthType.PERCENTAGE },
+      children: [new Paragraph({ children: [new TextRun({ text, bold: b, size: 18 })], alignment: center ? AlignmentType.CENTER : AlignmentType.LEFT })],
+      width: { size: w, type: WidthType.PERCENTAGE },
     })
 
   const tableRows: TableRow[] = [
     new TableRow({
       tableHeader: true,
       children: [
-        new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: 'ITEM', bold: true, size: 18 })] })], width: { size: colW[0], type: WidthType.PERCENTAGE } }),
-        new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: 'MARCA / MODELO', bold: true, size: 18 })] })], width: { size: colW[1], type: WidthType.PERCENTAGE } }),
-        new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: 'NÚMERO DE SÉRIE / ID / IMEI', bold: true, size: 18 })] })], width: { size: colW[2], type: WidthType.PERCENTAGE } }),
-        new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: 'CHECK (✓)', bold: true, size: 18 })] })], width: { size: colW[3], type: WidthType.PERCENTAGE } }),
+        tc('ITEM', W.item, true),
+        tc('MARCA / MODELO', W.modelo, true),
+        tc('NÚMERO DE SÉRIE / ID / IMEI', W.ns, true),
+        tc('CHECK (✓)', W.chk, true, true),
       ],
     }),
     ...(allEq.length === 0
@@ -230,10 +216,10 @@ function buildDocx(opts: {
         })]
       : allEq.map((r) => new TableRow({
           children: [
-            new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: r.item, size: 18 })] })], width: { size: colW[0], type: WidthType.PERCENTAGE } }),
-            new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: r.modelo, size: 18 })] })], width: { size: colW[1], type: WidthType.PERCENTAGE } }),
-            new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: r.ns, size: 18 })] })], width: { size: colW[2], type: WidthType.PERCENTAGE } }),
-            new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: '☒', size: 18 })], alignment: AlignmentType.CENTER })], width: { size: colW[3], type: WidthType.PERCENTAGE } }),
+            tc(r.item, W.item),
+            tc(r.modelo, W.modelo),
+            tc(r.ns, W.ns),
+            tc('☒', W.chk, false, true),
           ],
         }))),
   ]

@@ -45,7 +45,6 @@ function eqFromSummary(eq: { category: { name: string }; name?: string | null; p
 }
 
 function TermoContent({
-  context,
   personId,
 }: {
   context: InventoryContextResponse
