@@ -22,6 +22,13 @@ import { getPerson } from '@/src/modules/inventory/service'
 
 export const dynamic = 'force-dynamic'
 
+const extraEqSchema = z.object({
+  category: z.string().trim().max(200).optional().default(''),
+  description: z.string().trim().max(500).optional().default(''),
+  patrimony: z.string().trim().max(200).optional().default(''),
+  serialNumber: z.string().trim().max(200).optional().default(''),
+})
+
 const bodySchema = z.object({
   model: z.enum(['CLT_HECKE', 'PJ_HECKE', 'CLT_MARKETMOVE', 'PJ_MARKETMOVE']),
   cpf: z.string().trim().max(20).optional(),
@@ -29,6 +36,7 @@ const bodySchema = z.object({
   companyCnpj: z.string().trim().max(30).optional(),
   representativeName: z.string().trim().max(300).optional(),
   representativeCpf: z.string().trim().max(20).optional(),
+  extraEquipment: z.array(extraEqSchema).max(50).optional(),
 })
 
 type RouteContext = { params: Promise<{ id: string }> }
@@ -84,6 +92,7 @@ export async function POST(request: Request, route: RouteContext) {
         serialNumber?: string | null
         status: string
       }>,
+      extraEquipment: body.extraEquipment ?? [],
       today,
     })
 
@@ -168,12 +177,13 @@ function buildDocx(opts: {
     serialNumber?: string | null
     status: string
   }>
+  extraEquipment: Array<{ category: string; description: string; patrimony: string; serialNumber: string }>
   today: string
 }) {
   const {
     employer, employerRole, employeeRole, contractLabel, isPJ,
     person, cpf, companyName, companyCnpj, representativeName, representativeCpf,
-    equipment, today,
+    equipment, extraEquipment, today,
   } = opts
 
   const statusMap: Record<string, string> = {
@@ -209,27 +219,50 @@ function buildDocx(opts: {
             ],
           }),
         ]
-      : equipment.map(
-          (eq, i) =>
-            new TableRow({
-              children: [
-                String(i + 1),
-                eq.category.name,
-                eq.name ?? '—',
-                eq.patrimony ?? '—',
-                eq.assetTag ?? '—',
-                eq.serialNumber ?? '—',
-                statusMap[eq.status] ?? eq.status,
-                '☐',
-              ].map(
-                (v) =>
-                  new TableCell({
-                    children: [new Paragraph({ children: [new TextRun({ text: v, size: 18 })] })],
-                    width: { size: 100 / 8, type: WidthType.PERCENTAGE },
-                  }),
-              ),
-            }),
-        )),
+      : [
+          ...equipment.map(
+            (eq, i) =>
+              new TableRow({
+                children: [
+                  String(i + 1),
+                  eq.category.name,
+                  eq.name ?? '—',
+                  eq.patrimony ?? '—',
+                  eq.assetTag ?? '—',
+                  eq.serialNumber ?? '—',
+                  statusMap[eq.status] ?? eq.status,
+                  '☐',
+                ].map(
+                  (v) =>
+                    new TableCell({
+                      children: [new Paragraph({ children: [new TextRun({ text: v, size: 18 })] })],
+                      width: { size: 100 / 8, type: WidthType.PERCENTAGE },
+                    }),
+                ),
+              }),
+          ),
+          ...extraEquipment.map(
+            (eq, i) =>
+              new TableRow({
+                children: [
+                  String(equipment.length + i + 1),
+                  eq.category || '—',
+                  eq.description || '—',
+                  eq.patrimony || '—',
+                  '—',
+                  eq.serialNumber || '—',
+                  'Ativo',
+                  '☐',
+                ].map(
+                  (v) =>
+                    new TableCell({
+                      children: [new Paragraph({ children: [new TextRun({ text: v, size: 18 })] })],
+                      width: { size: 100 / 8, type: WidthType.PERCENTAGE },
+                    }),
+                ),
+              }),
+          ),
+        ]),
   ]
 
   const equipmentTable = new Table({
