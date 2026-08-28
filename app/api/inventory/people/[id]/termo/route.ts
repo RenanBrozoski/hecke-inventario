@@ -65,6 +65,7 @@ export async function POST(request: Request, route: RouteContext) {
       employerRole,
       employeeRole,
       isPJ,
+      isMarketMove,
       person: person as {
         name: string
         title?: string | null
@@ -153,6 +154,7 @@ function buildDocx(opts: {
   employerRole: string
   employeeRole: string
   isPJ: boolean
+  isMarketMove: boolean
   person: { name: string; title?: string | null; department?: { name: string } | null; employmentType?: string | null }
   cpf?: string
   companyName?: string
@@ -170,7 +172,7 @@ function buildDocx(opts: {
   extraEquipment: Array<{ category: string; description: string; patrimony: string; serialNumber: string }>
 }) {
   const {
-    employer, employerRole, employeeRole, isPJ,
+    employer, employerRole, employeeRole, isPJ, isMarketMove,
     person, cpf, companyName, companyCnpj, representativeName, representativeCpf,
     equipment, extraEquipment,
   } = opts
