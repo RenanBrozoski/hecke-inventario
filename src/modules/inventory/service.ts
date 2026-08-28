@@ -1147,7 +1147,7 @@ export async function listPeople(
     q?: string
     status?: Prisma.EnumInventoryPersonStatusFilter['equals']
     departmentId?: string
-    employmentType?: Prisma.EnumInventoryEmploymentTypeFilter['equals']
+    employmentType?: Prisma.EnumInventoryEmploymentTypeNullableFilter['equals']
     bitrixMatchStatus?: Prisma.EnumInventoryMatchStatusFilter['equals']
     archived: 'exclude' | 'include' | 'only'
   },
