@@ -131,6 +131,8 @@ function PersonDetailContent({
             <dd>{person.title || '—'}</dd>
             <dt>E-mail</dt>
             <dd>{person.email || '—'}</dd>
+            <dt>CPF</dt>
+            <dd>{person.cpf || '—'}</dd>
             <dt>Matrícula</dt>
             <dd>{person.employeeNumber || '—'}</dd>
             <dt>Vínculo</dt>

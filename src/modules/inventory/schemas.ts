@@ -213,6 +213,7 @@ const personMutableShape = {
   departmentId: z.union([id, z.null()]).optional(),
   title: optionalNullableText(200),
   email: z.union([z.string().trim().email().max(320), z.null()]).optional(),
+  cpf: optionalNullableText(20),
   employeeNumber: optionalNullableText(100),
   employmentType: z.union([z.nativeEnum(InventoryEmploymentType), z.null()]).optional(),
   status: z.nativeEnum(InventoryPersonStatus).optional(),

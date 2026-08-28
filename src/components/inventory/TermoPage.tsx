@@ -26,13 +26,22 @@ const MODEL_LABELS: Record<TermoModel, string> = {
 
 const EMPLOYER_CONFIGS = {
   HECKE: { name: 'HECKE REPRESENTAÇÕES COMERCIAIS LTDA', cnpj: '05.094.612/0001-04' },
-  MARKETMOVE: { name: 'MARKETMOVE COMUNICAÇÃO VISUAL LTDA', cnpj: '58.301.921/0001-74' },
+  MARKETMOVE: { name: 'MARKETMOVE SERVIÇOS DE MERCHANDISING LTDA', cnpj: '58.301.921/0001-74' },
 }
 
 type ExtraEq = { category: string; description: string; patrimony: string; serialNumber: string }
 
 function emptyExtraEq(): ExtraEq {
   return { category: '', description: '', patrimony: '', serialNumber: '' }
+}
+
+function eqFromSummary(eq: { category: { name: string }; name?: string | null; patrimony?: string | null; serialNumber?: string | null }): ExtraEq {
+  return {
+    category: eq.category.name,
+    description: eq.name ?? '',
+    patrimony: eq.patrimony ?? '',
+    serialNumber: eq.serialNumber ?? '',
+  }
 }
 
 function TermoContent({
@@ -61,7 +70,7 @@ function TermoContent({
         if (!r.ok) throw new Error(`Erro ${r.status}`)
         return r.json() as Promise<PersonDetail>
       })
-      .then(setPerson)
+      .then((p) => { setPerson(p); if (p.cpf) setCpf(p.cpf) })
       .catch((e: unknown) => setError(e instanceof Error ? e.message : 'Erro ao carregar'))
   }, [authorizedFetch, personId])
 
@@ -204,8 +213,9 @@ function TermoContent({
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
             <strong style={{ fontSize: '0.9rem' }}>Equipamentos adicionais</strong>
             <button type="button" onClick={addExtraEq} style={{ fontSize: '0.8rem', padding: '0.2rem 0.6rem' }}>
-              + Adicionar linha
+              + Manual
             </button>
+            <ExistingEquipmentAdder onAdd={(eq) => setExtraEquipment((prev) => [...prev, eqFromSummary(eq)])} authorizedFetch={authorizedFetch} />
           </div>
           {extraEquipment.length === 0 && (
             <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted, #888)', margin: 0 }}>
@@ -264,6 +274,68 @@ function TermoContent({
           extraEquipment={extraEquipment}
         />
       </div>
+    </div>
+  )
+}
+
+function ExistingEquipmentAdder({
+  onAdd,
+  authorizedFetch,
+}: {
+  onAdd: (eq: { category: { name: string }; name?: string | null; patrimony?: string | null; serialNumber?: string | null }) => void
+  authorizedFetch: (input: string, init?: RequestInit) => Promise<Response>
+}) {
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState<Array<{ id: string; category: { name: string }; name?: string | null; patrimony?: string | null; serialNumber?: string | null }>>([])
+  const [open, setOpen] = useState(false)
+
+  useEffect(() => {
+    if (query.trim().length < 2) { setResults([]); return }
+    const timer = window.setTimeout(() => {
+      void authorizedFetch(`/api/inventory/equipment?page=1&pageSize=20&q=${encodeURIComponent(query.trim())}`)
+        .then(async (r) => r.ok ? r.json() : { items: [] })
+        .then((d: { items?: typeof results }) => setResults(d.items ?? []))
+        .catch(() => setResults([]))
+    }, 250)
+    return () => window.clearTimeout(timer)
+  }, [authorizedFetch, query])
+
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)} style={{ fontSize: '0.8rem', padding: '0.2rem 0.6rem' }}>
+        + Buscar cadastrado
+      </button>
+    )
+  }
+
+  return (
+    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+      <input
+        autoFocus
+        placeholder="Busque por nome, patrimônio…"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        style={{ minWidth: '220px', fontSize: '0.85rem', padding: '0.25rem 0.5rem' }}
+      />
+      {results.length > 0 && (
+        <select
+          size={1}
+          onChange={(e) => {
+            const found = results.find((r) => r.id === e.target.value)
+            if (found) { onAdd(found); setOpen(false); setQuery('') }
+          }}
+          defaultValue=""
+          style={{ fontSize: '0.85rem' }}
+        >
+          <option value="" disabled>Selecione…</option>
+          {results.map((eq) => (
+            <option key={eq.id} value={eq.id}>
+              {[eq.category.name, eq.patrimony, eq.name].filter(Boolean).join(' – ')}
+            </option>
+          ))}
+        </select>
+      )}
+      <button type="button" onClick={() => { setOpen(false); setQuery('') }} style={{ fontSize: '0.8rem' }}>✕</button>
     </div>
   )
 }

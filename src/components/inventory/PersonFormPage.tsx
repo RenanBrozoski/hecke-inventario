@@ -37,6 +37,7 @@ function PersonFormContent({
     departmentId: '',
     title: '',
     email: '',
+    cpf: '',
     employeeNumber: '',
     employmentType: '',
     status: 'ACTIVE' as PersonStatus,
@@ -68,6 +69,7 @@ function PersonFormContent({
           departmentId: person.departmentId ?? person.department?.id ?? '',
           title: person.title ?? '',
           email: person.email ?? '',
+          cpf: person.cpf ?? '',
           employeeNumber: person.employeeNumber ?? '',
           employmentType: person.employmentType ?? '',
           status: person.status,
@@ -102,6 +104,7 @@ function PersonFormContent({
             departmentId: form.departmentId || null,
             title: nullable(form.title),
             email: nullable(form.email),
+            cpf: nullable(form.cpf),
             employeeNumber: nullable(form.employeeNumber),
             employmentType: form.employmentType || null,
             status: form.status,
@@ -174,6 +177,14 @@ function PersonFormContent({
               value={form.email}
               onChange={(event) => setForm({ ...form, email: event.target.value })}
               maxLength={320}
+            />
+          </Field>
+          <Field label="CPF">
+            <input
+              value={form.cpf}
+              onChange={(event) => setForm({ ...form, cpf: event.target.value })}
+              placeholder="000.000.000-00"
+              maxLength={20}
             />
           </Field>
           <Field label="Matrícula">

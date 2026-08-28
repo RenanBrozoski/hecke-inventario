@@ -54,7 +54,7 @@ export async function POST(request: Request, route: RouteContext) {
     const isMarketMove = body.model.endsWith('MARKETMOVE')
 
     const employer = isMarketMove
-      ? { name: 'MARKETMOVE COMUNICAÇÃO VISUAL LTDA', cnpj: '58.301.921/0001-74' }
+      ? { name: 'MARKETMOVE SERVIÇOS DE MERCHANDISING LTDA', cnpj: '58.301.921/0001-74' }
       : { name: 'HECKE REPRESENTAÇÕES COMERCIAIS LTDA', cnpj: '05.094.612/0001-04' }
 
     const employerRole = isPJ ? 'CONTRATANTE' : 'EMPREGADOR'
@@ -186,110 +186,69 @@ function buildDocx(opts: {
     equipment, extraEquipment, today,
   } = opts
 
-  const statusMap: Record<string, string> = {
-    ACTIVE: 'Ativo', STOCK: 'Em estoque', MAINTENANCE: 'Em manutenção',
-    BROKEN: 'Quebrado', LOANED: 'Emprestado', LOST: 'Extraviado', INACTIVE: 'Inativo',
-  }
-
-  // Equipment table
-  const tableRows = [
-    new TableRow({
-      tableHeader: true,
-      children: ['N°', 'Categoria', 'Descrição / Marca e Modelo', 'Cód. Interno', 'TAG', 'N/S · ID', 'Situação', '✓'].map(
-        (h) =>
-          new TableCell({
-            children: [new Paragraph({ children: [new TextRun({ text: h, bold: true, size: 18 })] })],
-            width: { size: 100 / 8, type: WidthType.PERCENTAGE },
-          }),
-      ),
-    }),
-    ...(equipment.length === 0
-      ? [
-          new TableRow({
-            children: [
-              new TableCell({
-                columnSpan: 8,
-                children: [
-                  new Paragraph({
-                    children: [new TextRun({ text: 'Nenhum equipamento cadastrado', italics: true })],
-                    alignment: AlignmentType.CENTER,
-                  }),
-                ],
-              }),
-            ],
-          }),
-        ]
-      : [
-          ...equipment.map(
-            (eq, i) =>
-              new TableRow({
-                children: [
-                  String(i + 1),
-                  eq.category.name,
-                  eq.name ?? '—',
-                  eq.patrimony ?? '—',
-                  eq.assetTag ?? '—',
-                  eq.serialNumber ?? '—',
-                  statusMap[eq.status] ?? eq.status,
-                  '☐',
-                ].map(
-                  (v) =>
-                    new TableCell({
-                      children: [new Paragraph({ children: [new TextRun({ text: v, size: 18 })] })],
-                      width: { size: 100 / 8, type: WidthType.PERCENTAGE },
-                    }),
-                ),
-              }),
-          ),
-          ...extraEquipment.map(
-            (eq, i) =>
-              new TableRow({
-                children: [
-                  String(equipment.length + i + 1),
-                  eq.category || '—',
-                  eq.description || '—',
-                  eq.patrimony || '—',
-                  '—',
-                  eq.serialNumber || '—',
-                  'Ativo',
-                  '☐',
-                ].map(
-                  (v) =>
-                    new TableCell({
-                      children: [new Paragraph({ children: [new TextRun({ text: v, size: 18 })] })],
-                      width: { size: 100 / 8, type: WidthType.PERCENTAGE },
-                    }),
-                ),
-              }),
-          ),
-        ]),
+  // ── Equipment table (4 cols: ITEM | MARCA/MODELO | N/S/ID/IMEI | CHECK) ──
+  const allEq: Array<{ item: string; modelo: string; ns: string }> = [
+    ...equipment.map((eq) => ({
+      item: eq.category.name,
+      modelo: [eq.name, eq.patrimony].filter(Boolean).join(' / '),
+      ns: eq.serialNumber ?? '—',
+    })),
+    ...extraEquipment.map((eq) => ({
+      item: eq.category || '—',
+      modelo: [eq.description, eq.patrimony].filter(Boolean).join(' / ') || '—',
+      ns: eq.serialNumber || '—',
+    })),
   ]
 
-  const equipmentTable = new Table({
-    rows: tableRows,
-    width: { size: 100, type: WidthType.PERCENTAGE },
-  })
+  const colW = [30, 40, 22, 8] // % widths
+  const mkCell = (text: string, bold = false, center = false) =>
+    new TableCell({
+      children: [new Paragraph({
+        children: [new TextRun({ text, bold, size: 18 })],
+        alignment: center ? AlignmentType.CENTER : AlignmentType.LEFT,
+      })],
+      width: { size: colW[0], type: WidthType.PERCENTAGE },
+    })
 
-  // Signature table
+  const tableRows: TableRow[] = [
+    new TableRow({
+      tableHeader: true,
+      children: [
+        new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: 'ITEM', bold: true, size: 18 })] })], width: { size: colW[0], type: WidthType.PERCENTAGE } }),
+        new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: 'MARCA / MODELO', bold: true, size: 18 })] })], width: { size: colW[1], type: WidthType.PERCENTAGE } }),
+        new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: 'NÚMERO DE SÉRIE / ID / IMEI', bold: true, size: 18 })] })], width: { size: colW[2], type: WidthType.PERCENTAGE } }),
+        new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: 'CHECK (✓)', bold: true, size: 18 })] })], width: { size: colW[3], type: WidthType.PERCENTAGE } }),
+      ],
+    }),
+    ...(allEq.length === 0
+      ? [new TableRow({
+          children: [new TableCell({
+            columnSpan: 4,
+            children: [new Paragraph({ children: [new TextRun({ text: 'Nenhum equipamento cadastrado', italics: true })], alignment: AlignmentType.CENTER })],
+            width: { size: 100, type: WidthType.PERCENTAGE },
+          })],
+        })]
+      : allEq.map((r) => new TableRow({
+          children: [
+            new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: r.item, size: 18 })] })], width: { size: colW[0], type: WidthType.PERCENTAGE } }),
+            new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: r.modelo, size: 18 })] })], width: { size: colW[1], type: WidthType.PERCENTAGE } }),
+            new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: r.ns, size: 18 })] })], width: { size: colW[2], type: WidthType.PERCENTAGE } }),
+            new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: '☒', size: 18 })], alignment: AlignmentType.CENTER })], width: { size: colW[3], type: WidthType.PERCENTAGE } }),
+          ],
+        }))),
+  ]
+
+  const equipmentTable = new Table({ rows: tableRows, width: { size: 100, type: WidthType.PERCENTAGE } })
+
+  // ── Signature table ───────────────────────────────────────────────────────
+  const sigName2 = isPJ ? (representativeName ?? person.name).toUpperCase() : person.name.toUpperCase()
   const signatureTable = new Table({
     rows: [
       new TableRow({
         children: [
-          new TableCell({
-            borders: { bottom: { style: BorderStyle.SINGLE, size: 1, color: '000000' }, top: noBorder(), left: noBorder(), right: noBorder() },
-            children: [new Paragraph({ children: [new TextRun('')], spacing: { before: 600, after: 0 } })],
-            width: { size: 45, type: WidthType.PERCENTAGE },
-          }),
-          new TableCell({
-            borders: { top: noBorder(), bottom: noBorder(), left: noBorder(), right: noBorder() },
-            children: [new Paragraph({ children: [new TextRun('     ')] })],
-            width: { size: 10, type: WidthType.PERCENTAGE },
-          }),
-          new TableCell({
-            borders: { bottom: { style: BorderStyle.SINGLE, size: 1, color: '000000' }, top: noBorder(), left: noBorder(), right: noBorder() },
-            children: [new Paragraph({ children: [new TextRun('')], spacing: { before: 600, after: 0 } })],
-            width: { size: 45, type: WidthType.PERCENTAGE },
-          }),
+          new TableCell({ borders: { bottom: { style: BorderStyle.SINGLE, size: 1, color: '000000' }, top: noBorder(), left: noBorder(), right: noBorder() }, children: [new Paragraph({ children: [new TextRun('')], spacing: { before: 600, after: 0 } })], width: { size: 45, type: WidthType.PERCENTAGE } }),
+          new TableCell({ borders: { top: noBorder(), bottom: noBorder(), left: noBorder(), right: noBorder() }, children: [new Paragraph({ children: [new TextRun('  ')] })], width: { size: 10, type: WidthType.PERCENTAGE } }),
+          new TableCell({ borders: { bottom: { style: BorderStyle.SINGLE, size: 1, color: '000000' }, top: noBorder(), left: noBorder(), right: noBorder() }, children: [new Paragraph({ children: [new TextRun('')], spacing: { before: 600, after: 0 } })], width: { size: 45, type: WidthType.PERCENTAGE } }),
         ],
       }),
       new TableRow({
@@ -300,23 +259,18 @@ function buildDocx(opts: {
               new Paragraph({ children: [new TextRun({ text: employer.name, bold: true, size: 18 })], spacing: { before: 40, after: 0 } }),
               new Paragraph({ children: [italic(employerRole)], spacing: { before: 0, after: 0 } }),
             ],
+            width: { size: 45, type: WidthType.PERCENTAGE },
           }),
-          new TableCell({ borders: { top: noBorder(), bottom: noBorder(), left: noBorder(), right: noBorder() }, children: [new Paragraph({ children: [] })] }),
+          new TableCell({ borders: { top: noBorder(), bottom: noBorder(), left: noBorder(), right: noBorder() }, children: [new Paragraph({ children: [] })], width: { size: 10, type: WidthType.PERCENTAGE } }),
           new TableCell({
             borders: { top: noBorder(), bottom: noBorder(), left: noBorder(), right: noBorder() },
             children: [
-              new Paragraph({
-                children: [new TextRun({ text: isPJ ? (representativeName ?? person.name).toUpperCase() : person.name.toUpperCase(), bold: true, size: 18 })],
-                spacing: { before: 40, after: 0 },
-              }),
-              ...(isPJ && representativeCpf
-                ? [new Paragraph({ children: [new TextRun({ text: `CPF: ${representativeCpf}`, size: 18 })], spacing: { before: 0, after: 0 } })]
-                : []),
-              ...(cpf && !isPJ
-                ? [new Paragraph({ children: [new TextRun({ text: `CPF: ${cpf}`, size: 18 })], spacing: { before: 0, after: 0 } })]
-                : []),
+              new Paragraph({ children: [new TextRun({ text: sigName2, bold: true, size: 18 })], spacing: { before: 40, after: 0 } }),
+              ...(isPJ && representativeCpf ? [new Paragraph({ children: [new TextRun({ text: `CPF: ${representativeCpf}`, size: 18 })], spacing: { before: 0, after: 0 } })] : []),
+              ...(!isPJ && cpf ? [new Paragraph({ children: [new TextRun({ text: `CPF: ${cpf}`, size: 18 })], spacing: { before: 0, after: 0 } })] : []),
               new Paragraph({ children: [italic(employeeRole)], spacing: { before: 0, after: 0 } }),
             ],
+            width: { size: 45, type: WidthType.PERCENTAGE },
           }),
         ],
       }),
@@ -325,133 +279,170 @@ function buildDocx(opts: {
     borders: { top: noBorder(), bottom: noBorder(), left: noBorder(), right: noBorder(), insideHorizontal: noBorder(), insideVertical: noBorder() },
   })
 
-  // Second party text
-  let secondPartyText: (TextRun | string)[] = []
+  // ── Party texts ───────────────────────────────────────────────────────────
+  const party1: (TextRun | string)[] = [
+    new TextRun({ text: employer.name, bold: true, italics: true, underline: { type: UnderlineType.SINGLE } }),
+    new TextRun(`, pessoa jurídica de direito privado, inscrita no CNPJ sob nº `),
+    new TextRun(employer.cnpj),
+    new TextRun(`, adiante denominado simplesmente `),
+    new TextRun({ text: employerRole, bold: true, italics: true }),
+    new TextRun(isPJ ? '; e' : ', e'),
+  ]
+
+  let party2: (TextRun | string)[]
   if (isPJ) {
-    secondPartyText = [
-      ...bold(companyName ? companyName.toUpperCase() : '[NOME DA EMPRESA]'),
-      new TextRun(`, pessoa jurídica inscrita no CNPJ sob nº `),
-      ...bold(companyCnpj ?? '[CNPJ]'),
-      new TextRun(`, representada neste ato por `),
-      ...bold(representativeName ? representativeName.toUpperCase() : '[REPRESENTANTE]'),
-      ...(representativeCpf ? [new TextRun(`, CPF nº `), ...bold(representativeCpf)] : []),
-      new TextRun(`, doravante simplesmente designada `),
-      italic(employeeRole),
+    party2 = [
+      new TextRun({ text: companyName ? companyName.toUpperCase() : '[NOME DA EMPRESA]', bold: true }),
+      new TextRun(`, pessoa jurídica de direito privado, inscrita no CNPJ sob nº `),
+      new TextRun(companyCnpj ?? '[CNPJ]'),
+      new TextRun(`, neste ato representada pela sua representante legal, `),
+      new TextRun(`${representativeName ? representativeName : '[REPRESENTANTE]'}`),
+      ...(representativeCpf ? [new TextRun(`, inscrita no CPF sob n.º ${representativeCpf}`)] : []),
+      new TextRun(`. doravante denominada, simplesmente, como `),
+      new TextRun({ text: employeeRole, bold: true, italics: true }),
       new TextRun('.'),
     ]
   } else {
-    secondPartyText = [
-      ...bold(person.name.toUpperCase()),
-      ...(person.title ? [new TextRun(`, ${person.title}`)] : []),
-      ...(person.department ? [new TextRun(`, setor ${person.department.name}`)] : []),
-      ...(cpf ? [new TextRun(`, CPF nº `), ...bold(cpf)] : []),
+    party2 = [
+      new TextRun({ text: person.name.toUpperCase(), bold: true }),
+      new TextRun(`, inscrito no CPF sob nº `),
+      new TextRun(cpf ?? '[CPF]'),
       new TextRun(`, doravante simplesmente designado `),
-      italic(employeeRole),
+      new TextRun({ text: employeeRole, bold: true, italics: true }),
       new TextRun('.'),
     ]
   }
 
+  // ── Clause texts: differ for CLT vs PJ ───────────────────────────────────
+  const considerando = isPJ ? [
+    bullet(`A ${employerRole} cede ao ${employeeRole}, a título gratuito, determinados dispositivos de sua propriedade, exclusivamente para a execução dos serviços contratados;`),
+    bullet(`Os equipamentos podem conter ou acessar dados corporativos, sistemas internos e informações confidenciais da ${employerRole};`),
+    bullet('A Lei nº 13.709/2018 (LGPD) exige autorização expressa do titular de dados para acesso a informações armazenadas em dispositivos de uso pessoal ou compartilhado;'),
+  ] : [
+    bullet(`A ${employerRole} disponibiliza ao ${employeeRole}, para fins exclusivamente profissionais, determinados equipamentos de sua propriedade;`),
+    bullet(`Os equipamentos poderão conter dados corporativos e estar conectados aos sistemas e informações sigilosas da ${employerRole};`),
+    bullet('A Lei Geral de Proteção de Dados Pessoais (Lei nº 13.709/2018 – LGPD) exige o consentimento do titular de dados para acesso a comunicações e informações armazenadas em dispositivos de uso pessoal ou compartilhado;'),
+  ]
+
+  const introFirmar = isPJ
+    ? [new TextRun('Celebram o presente '), ...bold('TERMO DE RESPONSABILIDADE E AUTORIZAÇÃO DE ACESSO'), new TextRun(', que se regerá pelas cláusulas e condições seguintes:')]
+    : [new TextRun('As partes resolvem firmar o presente '), ...bold('TERMO DE RESPONSABILIDADE E AUTORIZAÇÃO DE ACESSO'), new TextRun(', com as cláusulas e condições seguintes:')]
+
+  const clauseObjeto = isPJ
+    ? `O presente termo tem por objeto a cessão, em caráter gratuito e temporário, de bens da ${employerRole} ao ${employeeRole} para fins exclusivamente profissionais, conforme quadro abaixo:`
+    : `O presente instrumento tem por objeto a cessão, em caráter gratuito e temporário, de bens da ${employerRole} ao ${employeeRole} para o exercício de suas atividades profissionais.`
+
+  const clauseSegunda = isPJ
+    ? `O ${employeeRole} compromete-se a utilizar os equipamentos de forma exclusiva para a execução dos serviços profissionais, sendo responsável pela guarda, conservação e devolução dos itens em perfeito estado de funcionamento. É vedada a cessão, empréstimo, aluguel ou transferência dos equipamentos a terceiros, mesmo que integrantes da equipe do ${employeeRole}, sem autorização expressa da ${employerRole}.`
+    : `O ${employeeRole} compromete-se a utilizar os equipamentos exclusivamente para fins profissionais, responsabilizando-se pela guarda, conservação e devolução em perfeito estado de funcionamento. É vedada a cessão, empréstimo ou transferência dos equipamentos a terceiros.`
+
+  const clauseTerceiraIntro = isPJ ? `O ${employeeRole} se compromete a:` : `O ${employeeRole} compromete-se a:`
+  const clauseTerceiraItems = isPJ ? [
+    `Utilizar os equipamentos exclusivamente no interesse das atividades prestadas à ${employerRole};`,
+    `Não alterar senhas de acesso, formatar dispositivos ou remover aplicativos sem prévia autorização da ${employerRole};`,
+    'Não instalar softwares ou aplicativos não autorizados;',
+    `Não utilizar os equipamentos para fins pessoais ou armazenar informações que possam comprometer a segurança da ${employerRole}.`,
+  ] : [
+    'Utilizar os equipamentos exclusivamente no interesse das atividades profissionais;',
+    `Não alterar senhas de acesso, nem formatar ou remover sistemas ou aplicativos sem autorização da ${employerRole};`,
+    'Não instalar aplicativos ou softwares não autorizados;',
+    `Não utilizar os equipamentos para fins pessoais contínuos ou armazenar informações de natureza pessoal que comprometam a segurança da ${employerRole}.`,
+  ]
+
+  const clauseQuartaIntro = isPJ
+    ? `Nos termos da Lei Geral de Proteção de Dados (Lei nº 13.709/2018), o ${employeeRole} autoriza expressamente a ${employerRole} a acessar, sempre que necessário, quaisquer dados e informações armazenadas nos dispositivos de sua titularidade cedidos temporariamente, incluindo, mas não se limitando a:`
+    : `Nos termos da Lei Geral de Proteção de Dados (Lei nº 13.709/2018), o ${employeeRole} autoriza expressamente a ${employerRole} a acessar, quando necessário, quaisquer informações armazenadas nos dispositivos corporativos por ele utilizados, incluindo, mas não se limitando a:`
+  const clauseQuartaItems = isPJ ? [
+    'Mensagens de e-mail corporativo;',
+    'Chamadas, mensagens e históricos em aplicativos de comunicação (ex: WhatsApp, Teams, Telegram etc.);',
+    'Arquivos, documentos, imagens e registros de navegação;',
+    'Registros de uso de sistemas, programas e aplicativos.',
+  ] : [
+    'Mensagens de e-mail corporativo;',
+    'Históricos de chamadas e mensagens via aplicativos como WhatsApp, Teams e similares;',
+    'Arquivos, documentos, imagens e registros de navegação;',
+    'Registros de uso dos sistemas e aplicativos instalados.',
+  ]
+  const clauseQuartaFecho = isPJ
+    ? `Essa autorização tem como finalidade a proteção de dados corporativos, segurança da informação e prevenção de riscos legais à ${employerRole}, observando-se os princípios da finalidade, necessidade, transparência e boa-fé previstos na LGPD.`
+    : `Essa autorização visa exclusivamente à proteção dos interesses da ${employerRole}, à prevenção de fraudes e à segurança da informação, respeitados os princípios da finalidade, necessidade, adequação, boa-fé e transparência previstos na LGPD.`
+
+  const clauseQuintaTitulo = isPJ ? 'Cláusula Quinta – DA DEVOLUÇÃO DOS EQUIPAMENTOS' : 'Cláusula Quinta – DA DEVOLUÇÃO'
+  const clauseQuintaIntro = isPJ
+    ? `O ${employeeRole} compromete-se a devolver os equipamentos cedidos:`
+    : `O ${employeeRole} compromete-se a devolver à ${employerRole} todos os equipamentos recebidos imediatamente após:`
+  const clauseQuintaItems = isPJ ? [
+    'Ao término do contrato de prestação de serviços;',
+    `Mediante solicitação formal da ${employerRole};`,
+    'Em caso de substituição ou troca de equipamentos.',
+  ] : [
+    'O término do contrato de trabalho;',
+    `Requisição formal da ${employerRole};`,
+    'Substituição ou troca de equipamento.',
+  ]
+
+  const clauseSextaTitulo = isPJ ? 'Cláusula Sexta – DAS PENALIDADES E RESPONSABILIDADE CIVIL' : 'Cláusula Sexta – DAS PENALIDADES'
+  const clauseSextaTexto = isPJ
+    ? `A não devolução dos equipamentos ou sua devolução danificada, bem como o uso indevido ou a violação das cláusulas deste termo, ensejará a responsabilização do ${employeeRole} por perdas e danos, inclusive eventuais medidas judiciais cabíveis.`
+    : `O descumprimento das cláusulas aqui estabelecidas poderá ensejar sanções administrativas e disciplinares, inclusive rescisão do contrato de trabalho por justa causa, quando aplicável, conforme previsto na legislação vigente.`
+
+  const clauseSetimaTexto = isPJ
+    ? 'Este termo entra em vigor na data de sua assinatura e é celebrado em duas vias de igual teor e forma, permanecendo uma com cada parte.'
+    : 'O presente termo entra em vigor na data de sua assinatura e é celebrado em duas vias de igual teor, ficando uma via com cada parte.'
+
+  const dateText = isPJ ? `Em ______ de ______________________ de 202___.` : `Curitiba/PR, ______, de ______________________, de 2026.`
+
+  // ── Assemble document ─────────────────────────────────────────────────────
   const children = [
-    // Title
-    new Paragraph({
-      children: [new TextRun({ text: employer.name, bold: true, size: 28, allCaps: true })],
-      alignment: AlignmentType.CENTER,
-      spacing: { before: 0, after: 120 },
-    }),
     new Paragraph({
       children: [new TextRun({ text: 'TERMO DE RESPONSABILIDADE E AUTORIZAÇÃO DE ACESSO A DISPOSITIVOS CORPORATIVOS', bold: true, size: 24 })],
       alignment: AlignmentType.CENTER,
       spacing: { before: 0, after: 300 },
     }),
 
-    // Parties
-    para([
-      ...bold(employer.name),
-      new TextRun(`, pessoa jurídica de direito privado, inscrita no CNPJ sob nº `),
-      ...bold(employer.cnpj),
-      new TextRun(`, adiante denominado simplesmente `),
-      italic(employerRole),
-      new TextRun(', e'),
-    ]),
-    para(secondPartyText),
+    para(party1),
+    para(party2),
 
-    // Considerando
     para(['Considerando que:']),
-    bullet(`A empresa disponibiliza ao ${employeeRole}, para fins exclusivamente profissionais, determinados equipamentos de sua propriedade;`),
-    bullet('Os equipamentos poderão conter dados corporativos e estar conectados aos sistemas e informações sigilosas da empresa;'),
-    bullet('A Lei Geral de Proteção de Dados Pessoais (Lei nº 13.709/2018 – LGPD) exige o consentimento do titular de dados para acesso a comunicações e informações armazenadas em dispositivos de uso pessoal ou compartilhado;'),
-    para([
-      new TextRun('As partes resolvem firmar o presente '),
-      ...bold('TERMO DE RESPONSABILIDADE E AUTORIZAÇÃO DE ACESSO'),
-      new TextRun(', com as cláusulas e condições seguintes:'),
-    ]),
+    ...considerando,
+    para(introFirmar),
 
-    // Cláusula 1
     clauseTitle('Cláusula Primeira – DO OBJETO'),
-    para([`O presente instrumento tem por objeto a cessão, em caráter gratuito e temporário, de bens da empresa ao ${employeeRole} para o exercício de suas atividades profissionais.`]),
+    para([clauseObjeto]),
     para([...bold('Equipamentos cedidos:')]),
     equipmentTable,
     spacer(),
 
-    // Cláusula 2
     clauseTitle(`Cláusula Segunda – DA RESPONSABILIDADE DO ${employeeRole}`),
-    para([`O ${employeeRole} compromete-se a utilizar os equipamentos exclusivamente para fins profissionais, responsabilizando-se pela guarda, conservação e devolução em perfeito estado de funcionamento. É vedada a cessão, empréstimo ou transferência dos equipamentos a terceiros.`]),
+    para([clauseSegunda]),
 
-    // Cláusula 3
-    clauseTitle(`Cláusula Terceira – DO USO E DAS RESTRIÇÕES`),
-    para([`O ${employeeRole} compromete-se a:`]),
-    bullet('Utilizar os equipamentos exclusivamente no interesse das atividades profissionais;'),
-    bullet('Não alterar senhas de acesso, nem formatar ou remover sistemas ou aplicativos sem autorização;'),
-    bullet('Não instalar aplicativos ou softwares não autorizados;'),
-    bullet(`Não utilizar os equipamentos para fins pessoais contínuos ou armazenar informações de natureza pessoal que comprometam a segurança da empresa.`),
+    clauseTitle('Cláusula Terceira – DO USO E DAS RESTRIÇÕES'),
+    para([clauseTerceiraIntro]),
+    ...clauseTerceiraItems.map(bullet),
 
-    // Cláusula 4
     clauseTitle('Cláusula Quarta – DA AUTORIZAÇÃO DE ACESSO AOS DADOS'),
-    para([`Nos termos da Lei Geral de Proteção de Dados (Lei nº 13.709/2018), o ${employeeRole} autoriza expressamente a empresa a acessar, quando necessário, quaisquer informações armazenadas nos dispositivos corporativos por ele utilizados, incluindo, mas não se limitando a:`]),
-    bullet('Mensagens de e-mail corporativo;'),
-    bullet('Históricos de chamadas e mensagens via aplicativos como WhatsApp, Teams e similares;'),
-    bullet('Arquivos, documentos, imagens e registros de navegação;'),
-    bullet('Registros de uso dos sistemas e aplicativos instalados.'),
-    para(['Essa autorização visa exclusivamente à proteção dos interesses da empresa, à prevenção de fraudes e à segurança da informação, respeitados os princípios da finalidade, necessidade, adequação, boa-fé e transparência previstos na LGPD.']),
+    para([clauseQuartaIntro]),
+    ...clauseQuartaItems.map(bullet),
+    para([clauseQuartaFecho]),
 
-    // Cláusula 5
-    clauseTitle('Cláusula Quinta – DA DEVOLUÇÃO'),
-    para([`O ${employeeRole} compromete-se a devolver à empresa todos os equipamentos recebidos imediatamente após:`]),
-    bullet(`O término do ${contractLabel};`),
-    bullet('Requisição formal da empresa;'),
-    bullet('Substituição ou troca de equipamento.'),
+    clauseTitle(clauseQuintaTitulo),
+    para([clauseQuintaIntro]),
+    ...clauseQuintaItems.map(bullet),
 
-    // Cláusula 6
-    clauseTitle('Cláusula Sexta – DAS PENALIDADES'),
-    para([
-      isPJ
-        ? `O descumprimento das cláusulas aqui estabelecidas poderá ensejar sanções contratuais, inclusive rescisão do ${contractLabel} e reparação civil pelos danos causados.`
-        : `O descumprimento das cláusulas aqui estabelecidas poderá ensejar sanções administrativas e disciplinares, inclusive rescisão do contrato de trabalho por justa causa, quando aplicável, conforme previsto na legislação vigente.`,
-    ]),
+    clauseTitle(clauseSextaTitulo),
+    para([clauseSextaTexto]),
 
-    // Cláusula 7
     clauseTitle('Cláusula Sétima – DISPOSIÇÕES GERAIS'),
-    para(['O presente termo entra em vigor na data de sua assinatura e é celebrado em duas vias de igual teor, ficando uma via com cada parte.']),
+    para([clauseSetimaTexto]),
 
     spacer(),
-
-    // Date
     new Paragraph({
-      children: [new TextRun(`Curitiba/PR, ${today}`)],
-      alignment: AlignmentType.RIGHT,
+      children: [new TextRun(dateText)],
+      alignment: AlignmentType.LEFT,
       spacing: { before: 200, after: 400 },
     }),
-
-    // Signatures
     signatureTable,
   ]
 
-  return new Document({
-    sections: [
-      {
-        properties: {},
-        children,
-      },
-    ],
-  })
+  return new Document({ sections: [{ properties: {}, children }] })
 }

@@ -474,6 +474,7 @@ model InventoryPerson {
   department     InventoryDepartment?     @relation(fields: [departmentId], references: [id], onDelete: Restrict)
   title          String?
   email          String?
+  cpf            String?
   employeeNumber String?
   employmentType InventoryEmploymentType?
   status         InventoryPersonStatus    @default(ACTIVE)

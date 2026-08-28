@@ -140,6 +140,7 @@ export interface PersonSummary {
   status: PersonStatus
   title?: string | null
   email?: string | null
+  cpf?: string | null
   employeeNumber?: string | null
   employmentType?: EmploymentType | null
   bitrixUserId?: string | null
