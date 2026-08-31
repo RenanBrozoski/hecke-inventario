@@ -127,7 +127,9 @@ function EquipmentListContent({ context }: { context: InventoryContextResponse }
   const [loading, setLoading] = useState(true)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [exporting, setExporting] = useState(false)
-  const [hiddenCols, setHiddenCols] = useState<Set<string>>(new Set())
+  const [hiddenCols, setHiddenCols] = useState<Set<string>>(
+    () => loadHiddenCols(searchParams.get('categoryId') ?? ''),
+  )
   const [colPickerOpen, setColPickerOpen] = useState(false)
 
   const lookupsLoaded = useRef(false)

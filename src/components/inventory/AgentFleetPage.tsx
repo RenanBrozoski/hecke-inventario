@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useSession } from '@/src/components/session/SessionProvider'
 import { readApiError } from './format'
 import { InventoryGate } from './InventoryGate'
@@ -77,8 +77,15 @@ function FleetContent({ context }: { context: InventoryContextResponse }) {
 
   useEffect(() => { void load() }, [load])
 
-  const onlineAgents = agents.filter((a) => hoursAgo(a.syncedAt) < 24)
-  const inactiveAgents = agents.filter((a) => daysSince(a.syncedAt) >= 7)
+  const { onlineAgents, inactiveAgents } = useMemo(() => {
+    const online: AgentRow[] = []
+    const inactive: AgentRow[] = []
+    for (const a of agents) {
+      if (hoursAgo(a.syncedAt) < 24) online.push(a)
+      if (daysSince(a.syncedAt) >= 7) inactive.push(a)
+    }
+    return { onlineAgents: online, inactiveAgents: inactive }
+  }, [agents])
 
   function toggleSelect(id: string) {
     setSelected((prev) => {
