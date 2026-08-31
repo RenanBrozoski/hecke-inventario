@@ -5,11 +5,10 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSession } from '@/src/components/session/SessionProvider'
 import { EQUIPMENT_STATUS_LABELS, equipmentLabel, readApiError, statusTone } from './format'
-import { InventoryGate } from './InventoryGate'
+import { InventoryGate, useInventoryContext } from './InventoryGate'
 import type {
   EquipmentListResponse,
   EquipmentSummary,
-  InventoryContextResponse,
   InventoryFieldLookup,
   InventoryLookupsResponse,
 } from './types'
@@ -79,7 +78,7 @@ const DEFAULT_FILTERS: Filters = {
 const PAGE_SIZE_OPTIONS = ['25', '50', '100']
 
 export function EquipmentListPage() {
-  return <InventoryGate>{(context) => <EquipmentListContent context={context} />}</InventoryGate>
+  return <InventoryGate><EquipmentListContent /></InventoryGate>
 }
 
 function filtersFromParams(params: URLSearchParams): Filters {
@@ -113,7 +112,8 @@ function filtersToParams(filters: Filters, page: number): URLSearchParams {
   return params
 }
 
-function EquipmentListContent({ context }: { context: InventoryContextResponse }) {
+function EquipmentListContent() {
+  const context = useInventoryContext()
   const searchParams = useSearchParams()
   const router = useRouter()
   const { authorizedFetch } = useSession()

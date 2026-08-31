@@ -5,12 +5,11 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSession } from '@/src/components/session/SessionProvider'
 import { equipmentLabel, formatDate, formatDateTime, readApiError, statusTone } from './format'
-import { InventoryGate } from './InventoryGate'
+import { InventoryGate, useInventoryContext } from './InventoryGate'
 import type {
   CorporateLine,
   CorporateLineListResponse,
   CorporateLineStatus,
-  InventoryContextResponse,
   InventoryLookupsResponse,
 } from './types'
 import { SearchableSelect } from './SearchableSelect'
@@ -68,14 +67,15 @@ function payload(form: LineForm) {
 }
 
 export function CorporateLinesPage() {
-  return <InventoryGate>{(context) => <CorporateLinesContent context={context} />}</InventoryGate>
+  return <InventoryGate><CorporateLinesContent /></InventoryGate>
 }
 
 export function CorporateLineDetailPage({ lineId }: { lineId: string }) {
-  return <InventoryGate>{(context) => <CorporateLineDetailContent context={context} lineId={lineId} />}</InventoryGate>
+  return <InventoryGate><CorporateLineDetailContent lineId={lineId} /></InventoryGate>
 }
 
-function CorporateLinesContent({ context }: { context: InventoryContextResponse }) {
+function CorporateLinesContent() {
+  const context = useInventoryContext()
   const { authorizedFetch } = useSession()
   const [data, setData] = useState<CorporateLineListResponse | null>(null)
   const [lookups, setLookups] = useState<InventoryLookupsResponse | null>(null)
@@ -238,7 +238,8 @@ function CorporateLinesContent({ context }: { context: InventoryContextResponse 
   )
 }
 
-function CorporateLineDetailContent({ context, lineId }: { context: InventoryContextResponse; lineId: string }) {
+function CorporateLineDetailContent({ lineId }: { lineId: string }) {
+  const context = useInventoryContext()
   const router = useRouter()
   const { authorizedFetch } = useSession()
   const [line, setLine] = useState<CorporateLine | null>(null)

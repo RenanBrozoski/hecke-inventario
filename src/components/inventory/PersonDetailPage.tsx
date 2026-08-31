@@ -15,8 +15,8 @@ import {
 } from './format'
 import { BulkTransferPanel } from './BulkTransferPanel'
 import { InventoryAttachments } from './InventoryAttachments'
-import { InventoryGate } from './InventoryGate'
-import type { InventoryContextResponse, PersonDetail } from './types'
+import { InventoryGate, useInventoryContext } from './InventoryGate'
+import type { PersonDetail } from './types'
 import styles from './inventory.module.css'
 
 const TERM_LABELS: Record<string, string> = {
@@ -27,20 +27,11 @@ const TERM_LABELS: Record<string, string> = {
 }
 
 export function PersonDetailPage({ personId }: { personId: string }) {
-  return (
-    <InventoryGate>
-      {(context) => <PersonDetailContent context={context} personId={personId} />}
-    </InventoryGate>
-  )
+  return <InventoryGate><PersonDetailContent personId={personId} /></InventoryGate>
 }
 
-function PersonDetailContent({
-  context,
-  personId,
-}: {
-  context: InventoryContextResponse
-  personId: string
-}) {
+function PersonDetailContent({ personId }: { personId: string }) {
+  const context = useInventoryContext()
   const router = useRouter()
   const { authorizedFetch } = useSession()
   const [person, setPerson] = useState<PersonDetail | null>(null)

@@ -5,10 +5,9 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { useSession } from '@/src/components/session/SessionProvider'
 import { equipmentLabel, formatDateTime, readApiError } from './format'
 import { InventoryAttachments } from './InventoryAttachments'
-import { InventoryGate } from './InventoryGate'
+import { InventoryGate, useInventoryContext } from './InventoryGate'
 import type {
   EquipmentSummary,
-  InventoryContextResponse,
   InventoryLookupsResponse,
   PersonDetail,
 } from './types'
@@ -47,17 +46,14 @@ type ManualTermType = 'DELIVERY' | 'RESPONSIBILITY' | 'RETURN'
 const MANUAL_TERM_TYPES: ManualTermType[] = ['DELIVERY', 'RESPONSIBILITY', 'RETURN']
 
 export function TermsPage() {
-  return <InventoryGate>{(context) => <TermsContent context={context} />}</InventoryGate>
+  return <InventoryGate><TermsContent /></InventoryGate>
 }
 export function TermDetailPage({ termId }: { termId: string }) {
-  return (
-    <InventoryGate>
-      {(context) => <TermDetailContent context={context} termId={termId} />}
-    </InventoryGate>
-  )
+  return <InventoryGate><TermDetailContent termId={termId} /></InventoryGate>
 }
 
-function TermsContent({ context }: { context: InventoryContextResponse }) {
+function TermsContent() {
+  const context = useInventoryContext()
   const { authorizedFetch } = useSession()
   const [data, setData] = useState<PageEnvelope | null>(null)
   const [lookups, setLookups] = useState<InventoryLookupsResponse | null>(null)
@@ -315,13 +311,8 @@ function TermsContent({ context }: { context: InventoryContextResponse }) {
   )
 }
 
-function TermDetailContent({
-  context,
-  termId,
-}: {
-  context: InventoryContextResponse
-  termId: string
-}) {
+function TermDetailContent({ termId }: { termId: string }) {
+  const context = useInventoryContext()
   const { authorizedFetch } = useSession()
   const [term, setTerm] = useState<TermDetail | null>(null)
   const [error, setError] = useState<string | null>(null)

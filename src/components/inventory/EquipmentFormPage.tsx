@@ -5,10 +5,9 @@ import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useSession } from '@/src/components/session/SessionProvider'
 import { EQUIPMENT_STATUS_LABELS, readApiError } from './format'
-import { InventoryGate } from './InventoryGate'
+import { InventoryGate, useInventoryContext } from './InventoryGate'
 import type {
   EquipmentDetail,
-  InventoryContextResponse,
   InventoryFieldLookup,
   InventoryLookupsResponse,
   EquipmentCodeSuggestion,
@@ -58,20 +57,11 @@ const INITIAL_FORM: FormState = {
 }
 
 export function EquipmentFormPage({ equipmentId }: EquipmentFormPageProps) {
-  return (
-    <InventoryGate>
-      {(context) => <EquipmentFormContent context={context} equipmentId={equipmentId} />}
-    </InventoryGate>
-  )
+  return <InventoryGate><EquipmentFormContent equipmentId={equipmentId} /></InventoryGate>
 }
 
-function EquipmentFormContent({
-  context,
-  equipmentId,
-}: {
-  context: InventoryContextResponse
-  equipmentId?: string
-}) {
+function EquipmentFormContent({ equipmentId }: { equipmentId?: string }) {
+  const context = useInventoryContext()
   const router = useRouter()
   const { authorizedFetch } = useSession()
   const [lookups, setLookups] = useState<InventoryLookupsResponse | null>(null)

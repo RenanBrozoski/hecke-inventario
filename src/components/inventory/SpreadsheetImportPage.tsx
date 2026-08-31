@@ -3,13 +3,22 @@
 import { useState, type FormEvent } from 'react'
 import { useSession } from '@/src/components/session/SessionProvider'
 import { readApiError } from './format'
-import { InventoryGate } from './InventoryGate'
+import { InventoryGate, useInventoryContext } from './InventoryGate'
 import styles from './inventory.module.css'
 
 type PreviewRow = { id: string; kind: string; sheet: string; row: number; disposition: string; warnings: string[]; errors: string[]; sensitiveColumnsOmitted: string[] }
 type Preview = { format: string; sheets: Array<{ name: string; rows: number; template: string }>; rows: PreviewRow[]; summary: Record<string, number> }
 
-export function SpreadsheetImportPage() { return <InventoryGate>{(context) => context.canAdmin ? <ImportContent /> : <p className="alert alert-error">Somente administradores podem importar planilhas.</p>}</InventoryGate> }
+export function SpreadsheetImportPage() {
+  return <InventoryGate><ImportGate /></InventoryGate>
+}
+
+function ImportGate() {
+  const { canAdmin } = useInventoryContext()
+  return canAdmin
+    ? <ImportContent />
+    : <p className="alert alert-error">Somente administradores podem importar planilhas.</p>
+}
 
 function ImportContent() {
   const { authorizedFetch } = useSession()

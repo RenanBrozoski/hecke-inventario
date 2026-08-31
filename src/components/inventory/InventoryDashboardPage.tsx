@@ -10,15 +10,16 @@ import {
   readApiError,
   statusTone,
 } from './format'
-import { InventoryGate } from './InventoryGate'
-import type { DashboardResponse, EquipmentStatus, InventoryContextResponse } from './types'
+import { InventoryGate, useInventoryContext } from './InventoryGate'
+import type { DashboardResponse, EquipmentStatus } from './types'
 import styles from './inventory.module.css'
 
 export function InventoryDashboardPage() {
-  return <InventoryGate>{(context) => <DashboardContent context={context} />}</InventoryGate>
+  return <InventoryGate><DashboardContent /></InventoryGate>
 }
 
-function DashboardContent({ context }: { context: InventoryContextResponse }) {
+function DashboardContent() {
+  const context = useInventoryContext()
   const { authorizedFetch } = useSession()
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null)
   const [error, setError] = useState<string | null>(null)

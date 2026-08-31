@@ -4,9 +4,8 @@ import Link from 'next/link'
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { useSession } from '@/src/components/session/SessionProvider'
 import { EMPLOYMENT_TYPE_LABELS, PERSON_STATUS_LABELS, readApiError, statusTone } from './format'
-import { InventoryGate } from './InventoryGate'
+import { InventoryGate, useInventoryContext } from './InventoryGate'
 import type {
-  InventoryContextResponse,
   InventoryLookupsResponse,
   PeopleListResponse,
 } from './types'
@@ -14,7 +13,7 @@ import { SearchableSelect } from './SearchableSelect'
 import styles from './inventory.module.css'
 
 export function PeopleListPage() {
-  return <InventoryGate>{(context) => <PeopleListContent context={context} />}</InventoryGate>
+  return <InventoryGate><PeopleListContent /></InventoryGate>
 }
 
 const BITRIX_STATUS_LABELS: Record<string, string> = {
@@ -39,7 +38,8 @@ type BitrixImportUser = {
   linkedPersonName: string | null
 }
 
-function PeopleListContent({ context }: { context: InventoryContextResponse }) {
+function PeopleListContent() {
+  const context = useInventoryContext()
   const { authorizedFetch } = useSession()
   const [q, setQ] = useState('')
   const [status, setStatus] = useState('')

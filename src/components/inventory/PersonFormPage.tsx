@@ -5,9 +5,8 @@ import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { useSession } from '@/src/components/session/SessionProvider'
 import { EMPLOYMENT_TYPE_LABELS, PERSON_STATUS_LABELS, readApiError } from './format'
-import { InventoryGate } from './InventoryGate'
+import { InventoryGate, useInventoryContext } from './InventoryGate'
 import type {
-  InventoryContextResponse,
   InventoryLookupsResponse,
   PersonDetail,
   PersonStatus,
@@ -15,20 +14,11 @@ import type {
 import styles from './inventory.module.css'
 
 export function PersonFormPage({ personId }: { personId?: string }) {
-  return (
-    <InventoryGate>
-      {(context) => <PersonFormContent context={context} personId={personId} />}
-    </InventoryGate>
-  )
+  return <InventoryGate><PersonFormContent personId={personId} /></InventoryGate>
 }
 
-function PersonFormContent({
-  context,
-  personId,
-}: {
-  context: InventoryContextResponse
-  personId?: string
-}) {
+function PersonFormContent({ personId }: { personId?: string }) {
+  const context = useInventoryContext()
   const router = useRouter()
   const { authorizedFetch } = useSession()
   const [lookups, setLookups] = useState<InventoryLookupsResponse | null>(null)

@@ -3,10 +3,9 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useSession } from '@/src/components/session/SessionProvider'
 import { FIELD_TYPE_LABELS, readApiError } from './format'
-import { InventoryGate } from './InventoryGate'
+import { InventoryGate, useInventoryContext } from './InventoryGate'
 import type {
   FieldType,
-  InventoryContextResponse,
   InventoryFieldLookup,
   InventoryRole,
   NamedLookup,
@@ -40,10 +39,11 @@ interface ManagedLookup extends NamedLookup {
 type Section = 'categories' | 'departments' | 'locations' | 'access'
 
 export function InventorySettingsPage() {
-  return <InventoryGate>{(context) => <SettingsContent context={context} />}</InventoryGate>
+  return <InventoryGate><SettingsContent /></InventoryGate>
 }
 
-function SettingsContent({ context }: { context: InventoryContextResponse }) {
+function SettingsContent() {
+  const context = useInventoryContext()
   const { authorizedFetch } = useSession()
   const [section, setSection] = useState<Section>('categories')
   const [categories, setCategories] = useState<Category[]>([])

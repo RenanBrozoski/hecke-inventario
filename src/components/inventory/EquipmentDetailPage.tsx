@@ -14,25 +14,16 @@ import {
   statusTone,
 } from './format'
 import { InventoryAttachments } from './InventoryAttachments'
-import { InventoryGate } from './InventoryGate'
-import type { EquipmentAuditEvent, EquipmentDetail, InventoryContextResponse, InventoryLookupsResponse, InventoryMovement } from './types'
+import { InventoryGate, useInventoryContext } from './InventoryGate'
+import type { EquipmentAuditEvent, EquipmentDetail, InventoryLookupsResponse, InventoryMovement } from './types'
 import styles from './inventory.module.css'
 
 export function EquipmentDetailPage({ equipmentId }: { equipmentId: string }) {
-  return (
-    <InventoryGate>
-      {(context) => <EquipmentDetailContent context={context} equipmentId={equipmentId} />}
-    </InventoryGate>
-  )
+  return <InventoryGate><EquipmentDetailContent equipmentId={equipmentId} /></InventoryGate>
 }
 
-function EquipmentDetailContent({
-  context,
-  equipmentId,
-}: {
-  context: InventoryContextResponse
-  equipmentId: string
-}) {
+function EquipmentDetailContent({ equipmentId }: { equipmentId: string }) {
+  const context = useInventoryContext()
   const router = useRouter()
   const { authorizedFetch } = useSession()
   const [equipment, setEquipment] = useState<EquipmentDetail | null>(null)

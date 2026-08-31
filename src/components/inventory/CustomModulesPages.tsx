@@ -4,8 +4,8 @@ import Link from 'next/link'
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { useSession } from '@/src/components/session/SessionProvider'
 import { FIELD_TYPE_LABELS, formatDate, formatDateTime, readApiError } from './format'
-import { InventoryGate } from './InventoryGate'
-import type { FieldType, InventoryContextResponse, InventoryFieldLookup } from './types'
+import { InventoryGate, useInventoryContext } from './InventoryGate'
+import type { FieldType, InventoryFieldLookup } from './types'
 import styles from './inventory.module.css'
 
 interface CustomField extends InventoryFieldLookup {
@@ -41,17 +41,14 @@ interface PageEnvelope {
 }
 
 export function CustomModulesPage() {
-  return <InventoryGate>{(context) => <ModulesContent context={context} />}</InventoryGate>
+  return <InventoryGate><ModulesContent /></InventoryGate>
 }
 export function CustomModuleRecordsPage({ moduleId }: { moduleId: string }) {
-  return (
-    <InventoryGate>
-      {(context) => <RecordsContent context={context} moduleId={moduleId} />}
-    </InventoryGate>
-  )
+  return <InventoryGate><RecordsContent moduleId={moduleId} /></InventoryGate>
 }
 
-function ModulesContent({ context }: { context: InventoryContextResponse }) {
+function ModulesContent() {
+  const context = useInventoryContext()
   const { authorizedFetch } = useSession()
   const [modules, setModules] = useState<CustomModule[] | null>(null)
   const [showForm, setShowForm] = useState(false)
@@ -176,13 +173,8 @@ function ModulesContent({ context }: { context: InventoryContextResponse }) {
   )
 }
 
-function RecordsContent({
-  context,
-  moduleId,
-}: {
-  context: InventoryContextResponse
-  moduleId: string
-}) {
+function RecordsContent({ moduleId }: { moduleId: string }) {
+  const context = useInventoryContext()
   const { authorizedFetch } = useSession()
   const [module, setModule] = useState<CustomModule | null>(null)
   const [data, setData] = useState<PageEnvelope | null>(null)

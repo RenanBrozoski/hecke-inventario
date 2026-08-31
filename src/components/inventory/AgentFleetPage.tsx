@@ -4,8 +4,7 @@ import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useSession } from '@/src/components/session/SessionProvider'
 import { readApiError } from './format'
-import { InventoryGate } from './InventoryGate'
-import type { InventoryContextResponse } from './types'
+import { InventoryGate, useInventoryContext } from './InventoryGate'
 import styles from './inventory.module.css'
 
 interface AgentRow {
@@ -45,10 +44,11 @@ function fmtDate(iso: string) {
 }
 
 export function AgentFleetPage() {
-  return <InventoryGate>{(ctx) => <FleetContent context={ctx} />}</InventoryGate>
+  return <InventoryGate><FleetContent /></InventoryGate>
 }
 
-function FleetContent({ context }: { context: InventoryContextResponse }) {
+function FleetContent() {
+  const context = useInventoryContext()
   const { authorizedFetch } = useSession()
   const [agents, setAgents] = useState<AgentRow[]>([])
   const [loading, setLoading] = useState(true)

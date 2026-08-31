@@ -2,14 +2,22 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { createContext, use, useCallback, useEffect, useState, type ReactNode } from 'react'
 import { useSession } from '@/src/components/session/SessionProvider'
 import { readApiError } from './format'
 import type { InventoryContextApiResponse, InventoryContextResponse } from './types'
 import styles from './inventory.module.css'
 
+export const InventoryContext = createContext<InventoryContextResponse | null>(null)
+
+export function useInventoryContext(): InventoryContextResponse {
+  const ctx = use(InventoryContext)
+  if (!ctx) throw new Error('useInventoryContext must be used inside InventoryGate')
+  return ctx
+}
+
 interface InventoryGateProps {
-  children: (context: InventoryContextResponse) => ReactNode
+  children: ReactNode
 }
 
 interface NavigationItem { href: string; label: string; icon: string; adminOnly?: boolean; exact?: boolean }
@@ -117,7 +125,9 @@ export function InventoryGate({ children }: InventoryGateProps) {
           <small>Acesso controlado</small>
         </div>
       </aside>
-      <main className={styles.inventoryContent}>{children(context)}</main>
+      <main className={styles.inventoryContent}>
+        <InventoryContext value={context}>{children}</InventoryContext>
+      </main>
     </div>
   )
 }

@@ -5,15 +5,11 @@ import { useEffect, useState } from 'react'
 import { useSession } from '@/src/components/session/SessionProvider'
 import { EQUIPMENT_STATUS_LABELS } from './format'
 import { InventoryGate } from './InventoryGate'
-import type { EquipmentSummary, InventoryContextResponse, PersonDetail } from './types'
+import type { EquipmentSummary, PersonDetail } from './types'
 import styles from './inventory.module.css'
 
 export function TermoPage({ personId }: { personId: string }) {
-  return (
-    <InventoryGate>
-      {(context) => <TermoContent context={context} personId={personId} />}
-    </InventoryGate>
-  )
+  return <InventoryGate><TermoContent personId={personId} /></InventoryGate>
 }
 
 type TermoModel = 'CLT_HECKE' | 'PJ_HECKE' | 'CLT_MARKETMOVE' | 'PJ_MARKETMOVE'
@@ -44,12 +40,7 @@ function eqFromSummary(eq: { category: { name: string }; name?: string | null; p
   }
 }
 
-function TermoContent({
-  personId,
-}: {
-  context: InventoryContextResponse
-  personId: string
-}) {
+function TermoContent({ personId }: { personId: string }) {
   const { authorizedFetch } = useSession()
   const [person, setPerson] = useState<PersonDetail | null>(null)
   const [error, setError] = useState<string | null>(null)

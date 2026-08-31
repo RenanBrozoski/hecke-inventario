@@ -40,7 +40,7 @@ interface AuditItem {
 }
 
 export function InventoryReportsPage() {
-  return <InventoryGate>{() => <ReportsContent />}</InventoryGate>
+  return <InventoryGate><ReportsContent /></InventoryGate>
 }
 
 function ReportsContent() {

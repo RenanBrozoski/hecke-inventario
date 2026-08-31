@@ -3,8 +3,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { useSession } from '@/src/components/session/SessionProvider'
 import { formatDate, readApiError } from './format'
-import { InventoryGate } from './InventoryGate'
-import type { InventoryContextResponse } from './types'
+import { InventoryGate, useInventoryContext } from './InventoryGate'
 import styles from './inventory.module.css'
 
 interface PageEnvelope<T> {
@@ -35,11 +34,11 @@ interface Receiving {
 }
 
 export function ExtensionsPage() {
-  return <InventoryGate>{(context) => <ExtensionsContent context={context} />}</InventoryGate>
+  return <InventoryGate><ExtensionsContent /></InventoryGate>
 }
 
 export function ReceivingsPage() {
-  return <InventoryGate>{(context) => <ReceivingsContent context={context} />}</InventoryGate>
+  return <InventoryGate><ReceivingsContent /></InventoryGate>
 }
 
 type ExtTab = 'all' | 'active' | 'inactive'
@@ -49,7 +48,8 @@ const EXT_TABS: { key: ExtTab; label: string }[] = [
   { key: 'inactive', label: 'Sem uso / Reserva' },
 ]
 
-function ExtensionsContent({ context }: { context: InventoryContextResponse }) {
+function ExtensionsContent() {
+  const context = useInventoryContext()
   const { authorizedFetch } = useSession()
   const [data, setData] = useState<PageEnvelope<Extension> | null>(null)
   const [q, setQ] = useState('')
@@ -322,7 +322,8 @@ function ExtensionsContent({ context }: { context: InventoryContextResponse }) {
   )
 }
 
-function ReceivingsContent({ context }: { context: InventoryContextResponse }) {
+function ReceivingsContent() {
+  const context = useInventoryContext()
   const { authorizedFetch } = useSession()
   const [data, setData] = useState<PageEnvelope<Receiving> | null>(null)
   const [q, setQ] = useState('')

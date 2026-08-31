@@ -3,8 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSession } from '@/src/components/session/SessionProvider'
 import { formatDateTime, readApiError } from './format'
-import { InventoryGate } from './InventoryGate'
-import type { InventoryContextResponse } from './types'
+import { InventoryGate, useInventoryContext } from './InventoryGate'
 import styles from './inventory.module.css'
 
 interface AuditItem {
@@ -68,14 +67,11 @@ function entityLabel(entityType: string): string {
 }
 
 export function AuditPage() {
-  return (
-    <InventoryGate>
-      {(context) => <AuditContent context={context} />}
-    </InventoryGate>
-  )
+  return <InventoryGate><AuditContent /></InventoryGate>
 }
 
-function AuditContent({ context }: { context: InventoryContextResponse }) {
+function AuditContent() {
+  const context = useInventoryContext()
   const { authorizedFetch } = useSession()
   const [data, setData] = useState<AuditResponse | null>(null)
   const [loading, setLoading] = useState(true)
