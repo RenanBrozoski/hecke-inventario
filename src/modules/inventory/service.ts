@@ -969,33 +969,32 @@ export async function bulkTransferEquipment(
         }
       }
 
-      // Fase CAS. Nenhum evento é anexado antes de todos os updates vencerem.
-      for (const item of equipment) {
-        const changed = await tx.inventoryEquipment.updateMany({
-          where: {
-            id: item.id,
-            portalId: context.portalId,
-            currentHolderId: sourcePersonId,
-            archivedAt: null,
-            revision: input.expectedRevisions[item.id],
-          },
-          data: {
-            currentHolderId: destinationPerson?.id ?? null,
-            // Ao devolver ao estoque, o setor legado permanece. Quando há
-            // destino, o setor canônico passa a ser o setor atual do destino.
-            ...(destinationPerson ? { departmentId: destinationPerson.departmentId } : {}),
-            revision: { increment: 1 },
-          },
-        })
-        if (changed.count !== 1) {
-          throw new InventoryConflictError(
-            'Um ou mais equipamentos foram alterados por outra pessoa. Recarregue e tente novamente.',
-          )
-        }
+      // Fase CAS. Todos os updates são independentes entre si — rodam em paralelo.
+      const casResults = await Promise.all(
+        equipment.map((item) =>
+          tx.inventoryEquipment.updateMany({
+            where: {
+              id: item.id,
+              portalId: context.portalId,
+              currentHolderId: sourcePersonId,
+              archivedAt: null,
+              revision: input.expectedRevisions[item.id],
+            },
+            data: {
+              currentHolderId: destinationPerson?.id ?? null,
+              ...(destinationPerson ? { departmentId: destinationPerson.departmentId } : {}),
+              revision: { increment: 1 },
+            },
+          }),
+        ),
+      )
+      if (casResults.some((r) => r.count !== 1)) {
+        throw new InventoryConflictError(
+          'Um ou mais equipamentos foram alterados por outra pessoa. Recarregue e tente novamente.',
+        )
       }
 
       const movedAt = parseDateOnly(input.movedAt)!
-      const movements = []
       const itemSnapshots = equipment.map((item) => {
         const specs = redactPasswordValues(item.specs, item.category.fields)
         return {
@@ -1019,12 +1018,13 @@ export async function bulkTransferEquipment(
         }
       })
 
-      for (const item of equipment) {
-        const destinationDepartment = destinationPerson
-          ? destinationPerson.department
-          : item.department
-        movements.push(
-          await tx.inventoryMovement.create({
+      // Cria os registros de movimentação em paralelo — cada item é independente.
+      const movements = await Promise.all(
+        equipment.map((item) => {
+          const destinationDepartment = destinationPerson
+            ? destinationPerson.department
+            : item.department
+          return tx.inventoryMovement.create({
             data: {
               portalId: context.portalId,
               equipmentId: item.id,
@@ -1044,9 +1044,9 @@ export async function bulkTransferEquipment(
               performedByBitrixUserId: context.bitrixUserId,
               performedByName: context.userName,
             },
-          }),
-        )
-      }
+          })
+        }),
+      )
 
       const term = input.createTerm
         ? await tx.inventoryTerm.create({
@@ -1199,6 +1199,45 @@ export async function listPeople(
 }
 
 export async function getPerson(portalId: string, personId: string) {
+  // audit e corporateLines só precisam de portalId/personId — ambos são parâmetros
+  // conhecidos antes de qualquer await, então podem iniciar em paralelo com a
+  // query de pessoa (que é pesada e inclui equipamentos, movimentações, etc.).
+  const auditPromise = prisma.auditLog.findMany({
+    where: {
+      portalId,
+      entityType: 'InventoryPerson',
+      entityId: personId,
+      action: { startsWith: 'inventory_' },
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 100,
+  })
+  const corporateLinesPromise = prisma.inventoryCorporateLine
+    .findMany({
+      where: { portalId, currentHolderId: personId, archivedAt: null },
+      orderBy: { normalizedNumber: 'asc' },
+      include: {
+        equipment: {
+          select: {
+            id: true,
+            patrimony: true,
+            assetTag: true,
+            name: true,
+            category: { select: { name: true } },
+          },
+        },
+      },
+    })
+    // O deploy de aplicação pode chegar antes da migration no Neon. A ficha
+    // continua utilizável (sem linhas) até a infraestrutura aplicar a tabela.
+    .catch((error: unknown) => {
+      if (
+        error instanceof PrismaRuntime.PrismaClientKnownRequestError &&
+        error.code === 'P2021'
+      ) return []
+      throw error
+    })
+
   const person = await prisma.inventoryPerson.findFirst({
     where: { id: personId, portalId },
     include: {
@@ -1222,6 +1261,8 @@ export async function getPerson(portalId: string, personId: string) {
     },
   })
   if (!person) throw new InventoryNotFoundError('Pessoa não encontrada.')
+
+  // extensions depende de person.name — aguarda apenas após a pessoa carregar.
   const [extensions, audit, corporateLinesResult] = await Promise.all([
     prisma.inventoryExtension.findMany({
       where: {
@@ -1231,41 +1272,8 @@ export async function getPerson(portalId: string, personId: string) {
       },
       orderBy: { number: 'asc' },
     }),
-    prisma.auditLog.findMany({
-      where: {
-        portalId,
-        entityType: 'InventoryPerson',
-        entityId: person.id,
-        action: { startsWith: 'inventory_' },
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 100,
-    }),
-    prisma.inventoryCorporateLine
-      .findMany({
-        where: { portalId, currentHolderId: person.id, archivedAt: null },
-        orderBy: { normalizedNumber: 'asc' },
-        include: {
-          equipment: {
-            select: {
-              id: true,
-              patrimony: true,
-              assetTag: true,
-              name: true,
-              category: { select: { name: true } },
-            },
-          },
-        },
-      })
-      // O deploy de aplicação pode chegar antes da migration no Neon. A ficha
-      // continua utilizável (sem linhas) até a infraestrutura aplicar a tabela.
-      .catch((error: unknown) => {
-        if (
-          error instanceof PrismaRuntime.PrismaClientKnownRequestError &&
-          error.code === 'P2021'
-        ) return []
-        throw error
-      }),
+    auditPromise,
+    corporateLinesPromise,
   ])
   const movementHistory = [...person.movementsFrom, ...person.movementsTo].sort(
     (left, right) => right.createdAt.getTime() - left.createdAt.getTime(),

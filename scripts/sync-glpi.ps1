@@ -33,7 +33,9 @@ function Expand-GlpiValues($Value) {
 function Get-GlpiPropertyValues($Items, [string]$Property) {
   foreach ($item in @($Items)) {
     if ($null -eq $item) { continue }
-    $value = $item.PSObject.Properties[$Property].Value
+    $propertyValue = $item.PSObject.Properties[$Property]
+    if ($null -eq $propertyValue) { continue }
+    $value = $propertyValue.Value
     foreach ($entry in @(Expand-GlpiValues $value)) {
       if (-not [string]::IsNullOrWhiteSpace([string]$entry)) { [string]$entry }
     }
@@ -42,11 +44,30 @@ function Get-GlpiPropertyValues($Items, [string]$Property) {
 
 function Get-GlpiCollection($Headers, [string]$Path) {
   try {
-    return @(Invoke-RestMethod -Uri "$glpiBaseUrl/apirest.php/$Path" -Headers $Headers -TimeoutSec 30)
+    $response = Invoke-RestMethod -Uri "$glpiBaseUrl/apirest.php/$Path" -Headers $Headers -TimeoutSec 30
+    return @(Expand-GlpiValues $response)
   } catch {
     Write-Warning "Não foi possível ler $Path no GLPI; o restante do equipamento será sincronizado."
     return @()
   }
+}
+
+function Get-FirstGlpiPropertyValue($Items, [string[]]$Properties) {
+  foreach ($property in $Properties) {
+    $value = Get-GlpiPropertyValues $Items $property | Select-Object -First 1
+    if (-not [string]::IsNullOrWhiteSpace([string]$value)) { return [string]$value }
+  }
+  return $null
+}
+
+function Get-FirstIPv4Address($Values) {
+  foreach ($value in @($Values)) {
+    $parsed = $null
+    if ([System.Net.IPAddress]::TryParse([string]$value, [ref]$parsed) -and $parsed.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetwork) {
+      return $parsed.ToString()
+    }
+  }
+  return $null
 }
 
 function Get-GlpiName($Headers, [string]$Type, $Id) {
@@ -105,13 +126,25 @@ try {
     $manufacturer = First-GlpiValue $detail.manufacturers_id
     $model = First-GlpiValue $detail.computermodels_id
     $operatingSystem = First-GlpiValue $detail.operatingsystems_id
-    $ipAddress = Get-GlpiPropertyValues @($detail) 'ip' | Select-Object -First 1
-    $antivirus = Get-GlpiPropertyValues @($detail) 'antivirus' | Select-Object -First 1
+    $ipAddress = Get-FirstIPv4Address (Get-GlpiPropertyValues @($detail) 'ip')
+    $anydeskCode = Get-FirstGlpiPropertyValue @($detail) @('anydesk_id', 'anydesk_code', 'anydesk', 'remote_access_id')
     $processors = Get-GlpiCollection $headers "Computer/$computerId/Item_DeviceProcessor"
     $memories = Get-GlpiCollection $headers "Computer/$computerId/Item_DeviceMemory"
     $drives = Get-GlpiCollection $headers "Computer/$computerId/Item_DeviceHardDrive"
     $cards = Get-GlpiCollection $headers "Computer/$computerId/Item_DeviceNetworkCard"
     $videoCards = Get-GlpiCollection $headers "Computer/$computerId/Item_DeviceGraphicCard"
+    $networkPorts = Get-GlpiCollection $headers "Computer/$computerId/NetworkPort"
+    $networkNames = foreach ($port in $networkPorts) {
+      Get-GlpiCollection $headers "NetworkPort/$($port.id)/NetworkName"
+    }
+    if (-not $ipAddress) { $ipAddress = Get-FirstIPv4Address (Get-GlpiPropertyValues $networkNames 'name') }
+    $software = Get-GlpiCollection $headers "Computer/$computerId/Software"
+    $softwareNames = @(Get-GlpiPropertyValues $software 'name')
+    $antivirus = Get-FirstGlpiPropertyValue @($detail) @('antivirus', 'antivirus_name')
+    if (-not $antivirus) {
+      $antivirus = $softwareNames | Where-Object { $_ -match '(?i)(mcafee|microsoft defender|windows defender|kaspersky|eset|bitdefender|avast|avg|norton|symantec|trend micro|sophos)' } | Select-Object -First 1
+    }
+    $ccleanerInstalled = @($softwareNames | Where-Object { $_ -match '(?i)ccleaner' }).Count -gt 0
     $processor = $processors | Select-Object -First 1
     $processorName = if ($processor) { Get-GlpiName $headers 'DeviceProcessor' $processor.deviceprocessors_id } else { $null }
     $videoCard = $videoCards | Select-Object -First 1
@@ -139,6 +172,8 @@ try {
       macWifi = if ($macAddresses.Count -gt 1) { [string]$macAddresses[1] } else { $null }
       ipAddress = if ($ipAddress) { [string]$ipAddress } else { $null }
       antivirus = if ($antivirus) { [string]$antivirus } else { $null }
+      anydeskCode = if ($anydeskCode) { [string]$anydeskCode } else { $null }
+      ccleanerInstalled = $ccleanerInstalled
     }
   }
   if (-not $items.Count) { Write-Output 'GLPI não retornou computadores para sincronizar.'; exit 0 }

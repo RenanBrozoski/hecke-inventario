@@ -36,6 +36,8 @@ const payload = {
     macCable: '00:11:22:33:44:55',
     macWifi: '66:77:88:99:AA:BB',
     videoCard: 'NVIDIA RTX',
+    anydeskCode: '123 456 789',
+    ccleanerInstalled: true,
   }],
 }
 
@@ -67,6 +69,8 @@ describe('syncGlpiComputers', () => {
       mac_cabo: '00:11:22:33:44:55',
       mac_wifi: '66:77:88:99:AA:BB',
       placa_video: 'NVIDIA RTX',
+      anydesk_id: '123 456 789',
+      ccleaner: true,
       glpi: { otherSerial: 'GLPI-OTHER-10' },
     })
   })

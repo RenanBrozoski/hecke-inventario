@@ -145,11 +145,11 @@ function PersonDetailContent({ personId }: { personId: string }) {
         </section>
         <section className={styles.card}>
           <h2>Observações</h2>
-          <p style={{ whiteSpace: 'pre-wrap' }}>{person.notes || 'Nenhuma observação.'}</p>
+          <p className={styles.preWrap}>{person.notes || 'Nenhuma observação.'}</p>
         </section>
       </div>
-      <section className={styles.card} style={{ marginBottom: '1rem' }}>
-        <div className={styles.pageHeader} style={{ marginBottom: '0.75rem' }}>
+      <section className={`${styles.card} ${styles.cardGap}`}>
+        <div className={`${styles.pageHeader} ${styles.cardSubheader}`}>
           <h2>Equipamentos atuais</h2>
           <span className={styles.badge}>{person.equipment?.length ?? 0}</span>
         </div>
@@ -199,7 +199,7 @@ function PersonDetailContent({ personId }: { personId: string }) {
       </section>
       <div className={styles.twoColumns}>
         <section className={styles.card}>
-          <div className={styles.pageHeader} style={{ marginBottom: '0.75rem' }}>
+          <div className={`${styles.pageHeader} ${styles.cardSubheader}`}>
             <h2>Linhas corporativas</h2>
             <Link href="/inventory/corporate-lines">Gerenciar linhas</Link>
           </div>
@@ -233,7 +233,7 @@ function PersonDetailContent({ personId }: { personId: string }) {
           )}
         </section>
       </div>
-      <section className={styles.card} style={{ marginBottom: '1rem' }}>
+      <section className={`${styles.card} ${styles.cardGap}`}>
         <h2>Histórico de equipamentos e movimentações</h2>
         {!person.movementHistory?.length ? <p className={styles.empty}>Nenhuma movimentação registrada.</p> : (
           <ul className={styles.timeline}>
@@ -247,7 +247,7 @@ function PersonDetailContent({ personId }: { personId: string }) {
           </ul>
         )}
       </section>
-      <section className={styles.card} style={{ marginBottom: '1rem' }}>
+      <section className={`${styles.card} ${styles.cardGap}`}>
         <h2>Alterações relevantes</h2>
         {!person.audit?.length ? <p className={styles.empty}>Nenhuma alteração registrada.</p> : (
           <ul className={styles.timeline}>

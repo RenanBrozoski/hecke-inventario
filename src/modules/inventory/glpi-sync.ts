@@ -23,6 +23,8 @@ const glpiItemSchema = z.object({
   macWifi: z.string().trim().max(50).nullable().optional(),
   ipAddress: z.string().trim().max(100).nullable().optional(),
   antivirus: z.string().trim().max(300).nullable().optional(),
+  anydeskCode: z.string().trim().max(100).nullable().optional(),
+  ccleanerInstalled: z.boolean().nullable().optional(),
 })
 
 export const glpiSyncPayloadSchema = z.object({
@@ -37,7 +39,7 @@ function nullable(value: string | null | undefined): string | null {
   return value?.trim() || null
 }
 
-function presentSpecs(specs: Record<string, string | number | null>) {
+function presentSpecs(specs: Record<string, string | number | boolean | null>) {
   return Object.fromEntries(Object.entries(specs).filter(([, value]) => value !== null))
 }
 
@@ -98,6 +100,8 @@ export async function syncGlpiComputers(payload: GlpiSyncPayload) {
         mac_wifi: nullable(item.macWifi),
         ip: nullable(item.ipAddress),
         antivirus: nullable(item.antivirus),
+        anydesk_id: nullable(item.anydeskCode),
+        ccleaner: item.ccleanerInstalled ?? null,
       })
       if (existing) {
         const specs = typeof existing.specs === 'object' && existing.specs && !Array.isArray(existing.specs)

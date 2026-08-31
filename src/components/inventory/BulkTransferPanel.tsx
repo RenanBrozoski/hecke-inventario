@@ -112,7 +112,7 @@ export function BulkTransferPanel({ person, onTransferred }: BulkTransferPanelPr
   }
 
   return (
-    <section className={styles.card} style={{ marginTop: '1rem' }}>
+    <section className={`${styles.card} ${styles.actionsGap}`}>
       <h2>Transferência em lote</h2>
       <p className={styles.notice}>
         Selecione equipamentos atualmente sob responsabilidade de {person.name}. Ao enviar para
@@ -218,7 +218,7 @@ export function BulkTransferPanel({ person, onTransferred }: BulkTransferPanelPr
             />{' '}
             Gerar termo de transferência
           </label>
-          <div className={styles.actions} style={{ marginTop: '1rem' }}>
+          <div className={`${styles.actions} ${styles.actionsGap}`}>
             <button className="primary" type="submit" disabled={saving || selectedIds.length === 0}>
               {saving ? 'Transferindo…' : `Transferir ${selectedIds.length || ''}`.trim()}
             </button>

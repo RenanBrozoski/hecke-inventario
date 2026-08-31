@@ -93,46 +93,69 @@ export async function confirmSpreadsheetImport(
   if (strategy === 'review' && pendingReview.length) {
     throw new InventoryValidationError('A importação possui conflitos que exigem revisão.', pendingReview.map((row) => ({ id: row.id, sheet: row.sheet, row: row.row, errors: row.errors })))
   }
-  const imported = { created: 0, updated: 0, skipped: 0, warnings: [] as string[] }
-  const equipmentIds = new Map<string, string>()
-  for (const row of preview.rows.filter((item) => item.kind === 'EQUIPMENT')) {
-    if (row.disposition === 'REVIEW' || (row.disposition === 'UPDATE' && strategy !== 'update')) { imported.skipped += 1; continue }
-    const input = {
-      categoryId: row.payload.categoryId!, patrimony: optional(row.payload.patrimony), assetTag: optional(row.payload.assetTag),
-      serialNumber: optional(row.payload.serialNumber), name: optional(row.payload.name), currentHolderId: optional(row.payload.holderId),
-      status: equipmentStatus(row.payload.status ?? null), receivedAt: optional(row.payload.receivedAt), deliveredAt: optional(row.payload.deliveredAt), notes: optional(row.payload.notes), specs: {},
-    }
-    if (row.disposition === 'UPDATE') {
-      const value = await updateEquipment(context, row.payload.existingEquipmentId!, { ...input, revision: Number(row.payload.existingRevision) }, 'IMPORT')
-      equipmentIds.set(row.id, value.id); imported.updated += 1
-    } else {
+  let created = 0, updated = 0, skipped = 0
+  const warnings: string[] = []
+
+  // Loop 1: equipamentos — independentes entre si, rodam em paralelo.
+  // A promise resolve com { rowId, equipmentId } para montar o mapa na loop 2.
+  const equipmentResults = await Promise.all(
+    preview.rows.filter((item) => item.kind === 'EQUIPMENT').map(async (row) => {
+      if (row.disposition === 'REVIEW' || (row.disposition === 'UPDATE' && strategy !== 'update')) {
+        skipped += 1
+        return null
+      }
+      const input = {
+        categoryId: row.payload.categoryId!, patrimony: optional(row.payload.patrimony), assetTag: optional(row.payload.assetTag),
+        serialNumber: optional(row.payload.serialNumber), name: optional(row.payload.name), currentHolderId: optional(row.payload.holderId),
+        status: equipmentStatus(row.payload.status ?? null), receivedAt: optional(row.payload.receivedAt), deliveredAt: optional(row.payload.deliveredAt), notes: optional(row.payload.notes), specs: {},
+      }
+      if (row.disposition === 'UPDATE') {
+        const value = await updateEquipment(context, row.payload.existingEquipmentId!, { ...input, revision: Number(row.payload.existingRevision) }, 'IMPORT')
+        updated += 1
+        return { rowId: row.id, equipmentId: value.id }
+      }
       const value = await createEquipment(context, input, 'IMPORT')
-      equipmentIds.set(row.id, value.id); imported.created += 1
-    }
-  }
-  for (const row of preview.rows.filter((item) => item.kind === 'CORPORATE_LINE')) {
-    if (row.disposition === 'REVIEW' || (row.disposition === 'UPDATE' && strategy !== 'update')) { imported.skipped += 1; continue }
-    const equipmentId = row.payload.sourceEquipmentRowId ? equipmentIds.get(row.payload.sourceEquipmentRowId) ?? null : null
-    if (row.disposition === 'UPDATE') {
-      await updateCorporateLine(context, row.payload.existingLineId!, {
-        revision: Number(row.payload.existingRevision), number: row.payload.number!, carrier: optional(row.payload.carrier),
-        plan: optional(row.payload.plan), dataAllowance: optional(row.payload.dataAllowance), currentHolderId: optional(row.payload.holderId),
-        equipmentId, simSlot: optional(row.payload.simSlot), notes: optional(row.payload.notes),
+      created += 1
+      return { rowId: row.id, equipmentId: value.id }
+    }),
+  )
+  const equipmentIds = new Map(equipmentResults.filter(Boolean).map((r) => [r!.rowId, r!.equipmentId]))
+
+  // Loop 2: linhas corporativas — dependem do mapa de equipamentos (loop 1 deve ter terminado),
+  // mas os itens dentro deste loop são independentes entre si.
+  await Promise.all(
+    preview.rows.filter((item) => item.kind === 'CORPORATE_LINE').map(async (row) => {
+      if (row.disposition === 'REVIEW' || (row.disposition === 'UPDATE' && strategy !== 'update')) {
+        skipped += 1
+        return
+      }
+      const equipmentId = row.payload.sourceEquipmentRowId ? equipmentIds.get(row.payload.sourceEquipmentRowId) ?? null : null
+      if (row.disposition === 'UPDATE') {
+        await updateCorporateLine(context, row.payload.existingLineId!, {
+          revision: Number(row.payload.existingRevision), number: row.payload.number!, carrier: optional(row.payload.carrier),
+          plan: optional(row.payload.plan), dataAllowance: optional(row.payload.dataAllowance), currentHolderId: optional(row.payload.holderId),
+          equipmentId, simSlot: optional(row.payload.simSlot), notes: optional(row.payload.notes),
+        }, 'IMPORT')
+        updated += 1
+        return
+      }
+      await createCorporateLine(context, {
+        number: row.payload.number!, carrier: optional(row.payload.carrier), plan: optional(row.payload.plan), dataAllowance: optional(row.payload.dataAllowance),
+        currentHolderId: optional(row.payload.holderId), equipmentId, simSlot: optional(row.payload.simSlot), notes: optional(row.payload.notes), status: 'ACTIVE',
       }, 'IMPORT')
-      imported.updated += 1
-      continue
-    }
-    await createCorporateLine(context, {
-      number: row.payload.number!, carrier: optional(row.payload.carrier), plan: optional(row.payload.plan), dataAllowance: optional(row.payload.dataAllowance),
-      currentHolderId: optional(row.payload.holderId), equipmentId, simSlot: optional(row.payload.simSlot), notes: optional(row.payload.notes), status: 'ACTIVE',
-    }, 'IMPORT')
-    imported.created += 1
-  }
-  for (const row of preview.rows.filter((item) => item.kind === 'EXTENSION' || item.kind === 'RECEIVING')) {
-    if (row.disposition === 'REVIEW') { imported.skipped += 1; continue }
-    if (row.kind === 'EXTENSION') await createExtension(context, { number: optional(row.payload.ramal) ?? optional(row.payload.numero) ?? optional(row.payload.number), collaborator: optional(row.payload.colaboradores) ?? optional(row.payload.colaborador), department: optional(row.payload.setor) ?? optional(row.payload.departamento), type: optional(row.payload.atendimento) ?? optional(row.payload.tipo), notes: optional(row.payload.observacao) })
-    else await createReceiving(context, { receivedAt: optional(row.payload['data de recebimento']), equipment: optional(row.payload.equipamento), tag: optional(row.payload.tag), quantity: Number(row.payload.quantidade ?? 1) || 1, deliveredAt: optional(row.payload['data de entrega']), deliveredTo: optional(row.payload['entregue para:']), notes: optional(row.payload.observacao) })
-    imported.created += 1
-  }
-  return { ...imported, totalRows: preview.rows.length, summary: preview.summary }
+      created += 1
+    }),
+  )
+
+  // Loop 3: ramais e recebimentos — todos independentes, rodam em paralelo.
+  await Promise.all(
+    preview.rows.filter((item) => item.kind === 'EXTENSION' || item.kind === 'RECEIVING').map(async (row) => {
+      if (row.disposition === 'REVIEW') { skipped += 1; return }
+      if (row.kind === 'EXTENSION') await createExtension(context, { number: optional(row.payload.ramal) ?? optional(row.payload.numero) ?? optional(row.payload.number), collaborator: optional(row.payload.colaboradores) ?? optional(row.payload.colaborador), department: optional(row.payload.setor) ?? optional(row.payload.departamento), type: optional(row.payload.atendimento) ?? optional(row.payload.tipo), notes: optional(row.payload.observacao) })
+      else await createReceiving(context, { receivedAt: optional(row.payload['data de recebimento']), equipment: optional(row.payload.equipamento), tag: optional(row.payload.tag), quantity: Number(row.payload.quantidade ?? 1) || 1, deliveredAt: optional(row.payload['data de entrega']), deliveredTo: optional(row.payload['entregue para:']), notes: optional(row.payload.observacao) })
+      created += 1
+    }),
+  )
+
+  return { created, updated, skipped, warnings, totalRows: preview.rows.length, summary: preview.summary }
 }

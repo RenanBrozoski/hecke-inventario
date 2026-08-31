@@ -81,9 +81,9 @@ function DashboardContent() {
             />
             <Metric label="Setores" value={dashboard.counts.departments} />
             <Metric label="Recebimentos" value={dashboard.counts.receivings ?? 0} />
-            <Metric label="Sem responsável" value={dashboard.counts.withoutHolder ?? 0} />
-            <Metric label="Vencidos" value={dashboard.counts.expired ?? 0} />
-            <Metric label="Vencem em 30 dias" value={dashboard.counts.expiringSoon ?? 0} />
+            <Metric label="Sem responsável" value={dashboard.counts.withoutHolder ?? 0} tone={(dashboard.counts.withoutHolder ?? 0) > 0 ? 'warning' : 'default'} />
+            <Metric label="Vencidos" value={dashboard.counts.expired ?? 0} tone={(dashboard.counts.expired ?? 0) > 0 ? 'warning' : 'default'} />
+            <Metric label="Vencem em 30 dias" value={dashboard.counts.expiringSoon ?? 0} tone={(dashboard.counts.expiringSoon ?? 0) > 0 ? 'warning' : 'default'} />
             <Metric label="Categorias" value={dashboard.counts.categories ?? 0} />
           </section>
 
@@ -177,7 +177,7 @@ function DashboardContent() {
               <Link href="/inventory/reports">Ver relatórios</Link>
             </div>
             {dashboard.equipmentByCategory.length === 0 ? (
-              <p className={styles.empty}>Nenhuma categoria cadastrada.</p>
+              <p className={styles.empty}>Nenhuma categoria cadastrada. <Link href="/inventory/settings">Adicionar categoria</Link></p>
             ) : (
               <div className={styles.tableWrap}>
                 <table>
@@ -213,7 +213,7 @@ function DashboardContent() {
           <section className={styles.card}>
             <h2>Movimentações recentes</h2>
             {dashboard.recentMovements.length === 0 ? (
-              <p className={styles.empty}>Nenhuma movimentação registrada.</p>
+              <p className={styles.empty}>Nenhuma movimentação registrada. <Link href="/inventory/equipment">Acessar equipamentos</Link></p>
             ) : (
               <ul className={styles.timeline}>
                 {dashboard.recentMovements.map((movement) => (
@@ -246,9 +246,9 @@ function DashboardContent() {
   )
 }
 
-function Metric({ label, value }: { label: string; value: number }) {
+function Metric({ label, value, tone = 'default' }: { label: string; value: number; tone?: 'default' | 'warning' }) {
   return (
-    <div className={styles.metric}>
+    <div className={`${styles.metric}${tone === 'warning' ? ` ${styles.metricWarn}` : ''}`}>
       <span className={styles.metricLabel}>{label}</span>
       <strong className={styles.metricValue}>{value}</strong>
     </div>

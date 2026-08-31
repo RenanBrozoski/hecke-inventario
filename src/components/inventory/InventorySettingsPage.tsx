@@ -90,7 +90,7 @@ function SettingsContent() {
           <p className={styles.subtitle}>Categorias, campos, setores, locais e acesso.</p>
         </div>
       </header>
-      <div className={styles.moduleNav} style={{ marginBottom: '1rem' }}>
+      <div className={`${styles.moduleNav} ${styles.moduleNavBar}`}>
         {(
           [
             ['categories', 'Categorias e campos'],

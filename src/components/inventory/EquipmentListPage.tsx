@@ -477,7 +477,7 @@ function EquipmentListContent() {
         <p className={`${styles.card} ${styles.empty}`}>
           {hasFilters
             ? 'Nenhum equipamento encontrado com esses filtros.'
-            : 'Nenhum equipamento cadastrado ainda.'}
+            : <>Nenhum equipamento cadastrado ainda. <Link href="/inventory/equipment/new">Cadastrar equipamento</Link></>}
         </p>
       )}
 
