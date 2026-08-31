@@ -12,17 +12,13 @@ export function TermoPage({ personId }: { personId: string }) {
   return <InventoryGate><TermoContent personId={personId} /></InventoryGate>
 }
 
-type TermoModel = 'CLT_HECKE' | 'PJ_HECKE' | 'CLT_MARKETMOVE' | 'PJ_MARKETMOVE'
-const MODEL_LABELS: Record<TermoModel, string> = {
-  CLT_HECKE: 'CLT — HECKE',
-  PJ_HECKE: 'PJ — HECKE',
-  CLT_MARKETMOVE: 'CLT — MarketMove',
-  PJ_MARKETMOVE: 'PJ — MarketMove',
-}
-
-const EMPLOYER_CONFIGS = {
-  HECKE: { name: 'HECKE REPRESENTAÇÕES COMERCIAIS LTDA', cnpj: '05.094.612/0001-04' },
-  MARKETMOVE: { name: 'MARKETMOVE SERVIÇOS DE MERCHANDISING LTDA', cnpj: '58.301.921/0001-74' },
+type TermoTemplate = {
+  id: string
+  name: string
+  employerName: string
+  employerCnpj: string
+  isPJ: boolean
+  dateFormat: string
 }
 
 type ExtraEq = { category: string; description: string; patrimony: string; serialNumber: string }
@@ -44,7 +40,8 @@ function TermoContent({ personId }: { personId: string }) {
   const { authorizedFetch } = useSession()
   const [person, setPerson] = useState<PersonDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [model, setModel] = useState<TermoModel>('CLT_HECKE')
+  const [templates, setTemplates] = useState<TermoTemplate[]>([])
+  const [templateId, setTemplateId] = useState<string>('')
   const [cpf, setCpf] = useState('')
   const [companyName, setCompanyName] = useState('')
   const [companyCnpj, setCompanyCnpj] = useState('')
@@ -64,9 +61,19 @@ function TermoContent({ personId }: { personId: string }) {
       .catch((e: unknown) => setError(e instanceof Error ? e.message : 'Erro ao carregar'))
   }, [authorizedFetch, personId])
 
-  const isPJ = model.startsWith('PJ')
-  const isMarketMove = model.endsWith('MARKETMOVE')
-  const employer = isMarketMove ? EMPLOYER_CONFIGS.MARKETMOVE : EMPLOYER_CONFIGS.HECKE
+  useEffect(() => {
+    authorizedFetch('/api/inventory/term-templates')
+      .then((r) => r.ok ? r.json() as Promise<TermoTemplate[]> : [])
+      .then((list) => {
+        setTemplates(list)
+        if (list.length > 0 && !templateId) setTemplateId(list[0]!.id)
+      })
+      .catch(() => undefined)
+  }, [authorizedFetch]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const selectedTemplate = templates.find((t) => t.id === templateId)
+  const isPJ = selectedTemplate?.isPJ ?? false
+  const employer = { name: selectedTemplate?.employerName ?? '', cnpj: selectedTemplate?.employerCnpj ?? '' }
   const employerRole = isPJ ? 'CONTRATANTE' : 'EMPREGADOR'
   const employeeRole = isPJ ? 'CONTRATADO' : 'EMPREGADO'
   const contractLabel = isPJ ? 'contrato de prestação de serviços' : 'contrato de trabalho'
@@ -89,7 +96,7 @@ function TermoContent({ personId }: { personId: string }) {
     setDownloading(true)
     setDownloadError(null)
     try {
-      const body: Record<string, unknown> = { model }
+      const body: Record<string, unknown> = { templateId }
       if (!isPJ && cpf.trim()) body.cpf = cpf.trim()
       if (isPJ) {
         if (companyName.trim()) body.companyName = companyName.trim()
@@ -160,9 +167,10 @@ function TermoContent({ personId }: { personId: string }) {
         <div className={styles.formGrid}>
           <div className={styles.field}>
             <label>Modelo</label>
-            <select value={model} onChange={(e) => setModel(e.target.value as TermoModel)}>
-              {Object.entries(MODEL_LABELS).map(([k, v]) => (
-                <option key={k} value={k}>{v}</option>
+            <select value={templateId} onChange={(e) => setTemplateId(e.target.value)} disabled={templates.length === 0}>
+              {templates.length === 0 && <option value="">Carregando...</option>}
+              {templates.map((t) => (
+                <option key={t.id} value={t.id}>{t.name}</option>
               ))}
             </select>
           </div>
@@ -261,6 +269,7 @@ function TermoContent({ personId }: { personId: string }) {
           employeeRole={employeeRole}
           contractLabel={contractLabel}
           isPJ={isPJ}
+          dateFormat={selectedTemplate?.dateFormat ?? 'city'}
           cpf={cpf}
           companyName={companyName}
           companyCnpj={companyCnpj}
@@ -344,6 +353,7 @@ function TermoDocument({
   employeeRole,
   contractLabel,
   isPJ,
+  dateFormat,
   cpf,
   companyName,
   companyCnpj,
@@ -359,6 +369,7 @@ function TermoDocument({
   employeeRole: string
   contractLabel: string
   isPJ: boolean
+  dateFormat: string
   cpf: string
   companyName: string
   companyCnpj: string
@@ -598,7 +609,9 @@ function TermoDocument({
       </p>
 
       {/* Assinatura */}
-      <p className={styles.termoSignatureCity}>Curitiba/PR, {today}</p>
+      <p className={styles.termoSignatureCity}>
+        {dateFormat === 'blank' ? `Em ____ de ________ de ____.` : `Curitiba/PR, ${today}`}
+      </p>
 
       <div className={styles.termoSignatures}>
         <div className={styles.termoSignatureBlock}>

@@ -17,10 +17,19 @@ import {
   inventoryErrorResponse,
   parseJsonBody,
   requireInventoryContext,
+  InventoryNotFoundError,
 } from '@/src/modules/inventory/http'
 import { getPerson } from '@/src/modules/inventory/service'
+import { prisma } from '@/src/lib/prisma'
 
 export const dynamic = 'force-dynamic'
+
+const LEGACY_EMPLOYER: Record<string, { name: string; cnpj: string; isPJ: boolean; dateFormat: string }> = {
+  CLT_HECKE:      { name: 'HECKE REPRESENTAÇÕES COMERCIAIS LTDA',      cnpj: '05.094.612/0001-04', isPJ: false, dateFormat: 'city' },
+  PJ_HECKE:       { name: 'HECKE REPRESENTAÇÕES COMERCIAIS LTDA',      cnpj: '05.094.612/0001-04', isPJ: true,  dateFormat: 'blank' },
+  CLT_MARKETMOVE: { name: 'MARKETMOVE SERVIÇOS DE MERCHANDISING LTDA', cnpj: '58.301.921/0001-74', isPJ: false, dateFormat: 'city' },
+  PJ_MARKETMOVE:  { name: 'MARKETMOVE SERVIÇOS DE MERCHANDISING LTDA', cnpj: '58.301.921/0001-74', isPJ: true,  dateFormat: 'blank' },
+}
 
 const extraEqSchema = z.object({
   category: z.string().trim().max(200).optional().default(''),
@@ -30,7 +39,10 @@ const extraEqSchema = z.object({
 })
 
 const bodySchema = z.object({
-  model: z.enum(['CLT_HECKE', 'PJ_HECKE', 'CLT_MARKETMOVE', 'PJ_MARKETMOVE']),
+  // new: templateId takes priority
+  templateId: z.string().optional(),
+  // legacy fallback
+  model: z.enum(['CLT_HECKE', 'PJ_HECKE', 'CLT_MARKETMOVE', 'PJ_MARKETMOVE']).optional(),
   cpf: z.string().trim().max(20).optional(),
   companyName: z.string().trim().max(300).optional(),
   companyCnpj: z.string().trim().max(30).optional(),
@@ -50,12 +62,28 @@ export async function POST(request: Request, route: RouteContext) {
     const person = await getPerson(portalId, id)
     const activeEquipment = (person.equipment ?? []).filter((e) => !e.archivedAt)
 
-    const isPJ = body.model.startsWith('PJ')
-    const isMarketMove = body.model.endsWith('MARKETMOVE')
+    // Resolve employer config from templateId (preferred) or legacy model
+    let isPJ: boolean
+    let employer: { name: string; cnpj: string }
+    let dateFormat: string
 
-    const employer = isMarketMove
-      ? { name: 'MARKETMOVE SERVIÇOS DE MERCHANDISING LTDA', cnpj: '58.301.921/0001-74' }
-      : { name: 'HECKE REPRESENTAÇÕES COMERCIAIS LTDA', cnpj: '05.094.612/0001-04' }
+    if (body.templateId) {
+      const tmpl = await prisma.inventoryTermTemplate.findFirst({
+        where: { id: body.templateId, portalId, active: true },
+        select: { employerName: true, employerCnpj: true, isPJ: true, dateFormat: true },
+      })
+      if (!tmpl) throw new InventoryNotFoundError('Modelo de termo não encontrado.')
+      isPJ = tmpl.isPJ
+      employer = { name: tmpl.employerName, cnpj: tmpl.employerCnpj }
+      dateFormat = tmpl.dateFormat
+    } else {
+      const cfg = LEGACY_EMPLOYER[body.model ?? 'CLT_HECKE']!
+      isPJ = cfg.isPJ
+      employer = { name: cfg.name, cnpj: cfg.cnpj }
+      dateFormat = cfg.dateFormat
+    }
+
+    const isMarketMove = employer.name.includes('MARKETMOVE')
 
     const employerRole = isPJ ? 'CONTRATANTE' : 'EMPREGADOR'
     const employeeRole = isPJ ? 'CONTRATADO' : 'EMPREGADO'
@@ -66,6 +94,7 @@ export async function POST(request: Request, route: RouteContext) {
       employeeRole,
       isPJ,
       isMarketMove,
+      dateFormat,
       person: person as {
         name: string
         title?: string | null
@@ -91,8 +120,8 @@ export async function POST(request: Request, route: RouteContext) {
     const buffer = await Packer.toBuffer(doc)
 
     const safeName = person.name.replace(/[^a-zA-Z0-9À-ú\s]/g, '').trim().replace(/\s+/g, '_')
-    const modelLabel = body.model.replace('_', '-')
-    const filename = `Termo_${modelLabel}_${safeName}.docx`
+    const templateLabel = body.templateId ? 'Modelo' : (body.model ?? 'CLT_HECKE').replace('_', '-')
+    const filename = `Termo_${templateLabel}_${safeName}.docx`
 
     return new NextResponse(new Uint8Array(buffer), {
       headers: {
@@ -155,6 +184,7 @@ function buildDocx(opts: {
   employeeRole: string
   isPJ: boolean
   isMarketMove: boolean
+  dateFormat: string
   person: { name: string; title?: string | null; department?: { name: string } | null; employmentType?: string | null }
   cpf?: string
   companyName?: string
@@ -172,7 +202,7 @@ function buildDocx(opts: {
   extraEquipment: Array<{ category: string; description: string; patrimony: string; serialNumber: string }>
 }) {
   const {
-    employer, employerRole, employeeRole, isPJ, isMarketMove,
+    employer, employerRole, employeeRole, isPJ, isMarketMove, dateFormat,
     person, cpf, companyName, companyCnpj, representativeName, representativeCpf,
     equipment, extraEquipment,
   } = opts
@@ -382,8 +412,7 @@ function buildDocx(opts: {
     ? 'Este termo entra em vigor na data de sua assinatura e é celebrado em duas vias de igual teor e forma, permanecendo uma com cada parte.'
     : 'O presente termo entra em vigor na data de sua assinatura e é celebrado em duas vias de igual teor, ficando uma via com cada parte.'
 
-  // PJ_HECKE usa formato "Em ____"; CLT e PJ_MarketMove usam formato "Curitiba/PR"
-  const dateText = (isPJ && !isMarketMove)
+  const dateText = dateFormat === 'blank'
     ? `Em ____ de ______________ de 2026.`
     : `Curitiba/PR, ______, de _________________, de 2026`
 

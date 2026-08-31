@@ -127,6 +127,7 @@ model BitrixPortal {
   inventoryCustomModuleFields  InventoryCustomModuleField[]
   inventoryCustomRecords       InventoryCustomRecord[]
   inventoryTerms               InventoryTerm[]
+  inventoryTermTemplates       InventoryTermTemplate[]
   inventoryAttachments         InventoryAttachment[]
   inventoryBlobCleanups        InventoryBlobCleanup[]
   inventoryImportRuns          InventoryImportRun[]
@@ -775,6 +776,25 @@ model InventoryTerm {
   @@index([portalId, archivedAt, createdAt])
   @@index([portalId, personId, createdAt])
   @@map("inventory_terms")
+}
+
+model InventoryTermTemplate {
+  id       String       @id @default(cuid())
+  portalId String
+  portal   BitrixPortal @relation(fields: [portalId], references: [id], onDelete: Restrict)
+
+  name         String
+  employerName String
+  employerCnpj String
+  isPJ         Boolean @default(false)
+  /// "city" = "Curitiba/PR, ____ de ________ de ____"  |  "blank" = "Em ____ de ________ de ____"
+  dateFormat   String  @default("city")
+  active       Boolean @default(true)
+  sortOrder    Int     @default(0)
+  createdAt    DateTime @default(now())
+
+  @@index([portalId, active, sortOrder])
+  @@map("inventory_term_templates")
 }
 
 /// Linha corporativa independente do aparelho. A posse humana e o vínculo com

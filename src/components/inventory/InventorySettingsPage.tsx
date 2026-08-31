@@ -36,7 +36,7 @@ interface ManagedLookup extends NamedLookup {
   active: boolean
   _count?: { equipment?: number; people?: number }
 }
-type Section = 'categories' | 'departments' | 'locations' | 'access'
+type Section = 'categories' | 'departments' | 'locations' | 'access' | 'term-templates'
 
 export function InventorySettingsPage() {
   return <InventoryGate><SettingsContent /></InventoryGate>
@@ -97,6 +97,7 @@ function SettingsContent() {
             ['departments', 'Setores'],
             ['locations', 'Locais'],
             ['access', 'Acesso'],
+            ['term-templates', 'Modelos de Termo'],
           ] as Array<[Section, string]>
         ).map(([id, label]) => (
           <button
@@ -132,6 +133,7 @@ function SettingsContent() {
             />
           )}
           {section === 'access' && <AccessSettings assignments={assignments} reload={load} />}
+          {section === 'term-templates' && <TermTemplatesSettings />}
         </>
       )}
     </div>
@@ -743,6 +745,140 @@ function AccessSettings({
                 </td>
               </tr>
             ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )
+}
+
+interface TermTemplate {
+  id: string
+  name: string
+  employerName: string
+  employerCnpj: string
+  isPJ: boolean
+  dateFormat: string
+  sortOrder: number
+}
+
+function TermTemplatesSettings() {
+  const { authorizedFetch } = useSession()
+  const [templates, setTemplates] = useState<TermTemplate[]>([])
+  const [editing, setEditing] = useState<TermTemplate | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [form, setForm] = useState({ name: '', employerName: '', employerCnpj: '', isPJ: false, dateFormat: 'city', sortOrder: 0 })
+
+  const load = useCallback(async () => {
+    const r = await authorizedFetch('/api/inventory/term-templates')
+    if (r.ok) setTemplates((await r.json()) as TermTemplate[])
+  }, [authorizedFetch])
+
+  useEffect(() => { void load() }, [load])
+
+  function startEdit(t: TermTemplate) {
+    setEditing(t)
+    setForm({ name: t.name, employerName: t.employerName, employerCnpj: t.employerCnpj, isPJ: t.isPJ, dateFormat: t.dateFormat, sortOrder: t.sortOrder })
+  }
+  function cancelEdit() { setEditing(null); setForm({ name: '', employerName: '', employerCnpj: '', isPJ: false, dateFormat: 'city', sortOrder: 0 }) }
+
+  async function handleSubmit(event: FormEvent) {
+    event.preventDefault()
+    setSaving(true); setError(null)
+    try {
+      const body = { ...form, sortOrder: Number(form.sortOrder) }
+      const response = editing
+        ? await authorizedFetch(`/api/inventory/term-templates/${editing.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+        : await authorizedFetch('/api/inventory/term-templates', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      if (!response.ok) throw new Error(await readApiError(response, 'Não foi possível salvar o modelo.'))
+      cancelEdit()
+      await load()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Falha ao salvar o modelo.')
+    } finally { setSaving(false) }
+  }
+
+  async function deactivate(t: TermTemplate) {
+    if (!window.confirm(`Remover o modelo "${t.name}"? Ele ficará inativo mas termos já gerados não são afetados.`)) return
+    setSaving(true); setError(null)
+    try {
+      const response = await authorizedFetch(`/api/inventory/term-templates/${t.id}`, { method: 'DELETE' })
+      if (!response.ok) throw new Error(await readApiError(response, 'Não foi possível remover o modelo.'))
+      await load()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Falha ao remover o modelo.')
+    } finally { setSaving(false) }
+  }
+
+  return (
+    <section className={styles.card}>
+      <h2>Modelos de Termo</h2>
+      <p className={styles.notice}>
+        Cada modelo define o empregador e o tipo de contrato usado nos Termos de Responsabilidade. Os modelos ficam disponíveis no dropdown de geração de DOCX.
+      </p>
+      {error && <p className="alert alert-error">{error}</p>}
+      <form onSubmit={handleSubmit}>
+        <div className={styles.formGrid}>
+          <Field label="Nome do modelo">
+            <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required placeholder="Ex.: CLT — Hecke" />
+          </Field>
+          <Field label="Razão social do empregador">
+            <input value={form.employerName} onChange={(e) => setForm({ ...form, employerName: e.target.value })} required />
+          </Field>
+          <Field label="CNPJ do empregador">
+            <input value={form.employerCnpj} onChange={(e) => setForm({ ...form, employerCnpj: e.target.value })} required placeholder="00.000.000/0001-00" />
+          </Field>
+          <Field label="Tipo de contrato">
+            <select value={form.isPJ ? 'pj' : 'clt'} onChange={(e) => setForm({ ...form, isPJ: e.target.value === 'pj' })}>
+              <option value="clt">CLT (empregado)</option>
+              <option value="pj">PJ (prestação de serviços)</option>
+            </select>
+          </Field>
+          <Field label="Formato da data de assinatura">
+            <select value={form.dateFormat} onChange={(e) => setForm({ ...form, dateFormat: e.target.value })}>
+              <option value="city">Curitiba/PR, [data]</option>
+              <option value="blank">Em ____ de ________ de ____</option>
+            </select>
+          </Field>
+          <Field label="Ordem">
+            <input type="number" min={0} value={form.sortOrder} onChange={(e) => setForm({ ...form, sortOrder: Number(e.target.value) })} style={{ width: '80px' }} />
+          </Field>
+        </div>
+        <div className={styles.actions}>
+          <button type="submit" className="primary" disabled={saving}>{editing ? 'Salvar alterações' : 'Adicionar modelo'}</button>
+          {editing && <button type="button" disabled={saving} onClick={cancelEdit}>Cancelar</button>}
+        </div>
+      </form>
+      <div className={`${styles.tableWrap} ${styles.sectionTitle}`}>
+        <table>
+          <thead>
+            <tr>
+              <th>Nome</th>
+              <th>Empregador</th>
+              <th>CNPJ</th>
+              <th>Tipo</th>
+              <th>Data</th>
+              <th>Ordem</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {templates.map((t) => (
+              <tr key={t.id}>
+                <td>{t.name}</td>
+                <td>{t.employerName}</td>
+                <td>{t.employerCnpj}</td>
+                <td>{t.isPJ ? 'PJ' : 'CLT'}</td>
+                <td>{t.dateFormat === 'city' ? 'Curitiba/PR' : 'Em branco'}</td>
+                <td>{t.sortOrder}</td>
+                <td className={styles.rowActions}>
+                  <button type="button" disabled={saving} onClick={() => startEdit(t)}>Editar</button>
+                  <button type="button" className="danger" disabled={saving} onClick={() => void deactivate(t)}>Remover</button>
+                </td>
+              </tr>
+            ))}
+            {templates.length === 0 && <tr><td colSpan={7} className={styles.muted}>Nenhum modelo cadastrado.</td></tr>}
           </tbody>
         </table>
       </div>
