@@ -138,6 +138,38 @@ function DashboardContent({ context }: { context: InventoryContextResponse }) {
             </section>
           </div>
 
+          {(dashboard.counts.withoutHolder ?? 0) + (dashboard.counts.linesWithoutEquipment ?? 0) + (dashboard.counts.peopleWithoutEquipment ?? 0) + (dashboard.counts.expiringSoon ?? 0) > 0 && (
+            <section className={styles.card} style={{ marginBottom: '1rem', borderLeft: '3px solid var(--warning, #f59e0b)' }}>
+              <h2 style={{ marginBottom: '0.75rem' }}>Alertas operacionais</h2>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                {(dashboard.counts.withoutHolder ?? 0) > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>⚠ <strong>{dashboard.counts.withoutHolder}</strong> equipamento(s) sem responsável</span>
+                    <Link href="/inventory/equipment">Ver equipamentos</Link>
+                  </div>
+                )}
+                {(dashboard.counts.linesWithoutEquipment ?? 0) > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>⚠ <strong>{dashboard.counts.linesWithoutEquipment}</strong> linha(s) ativa(s) sem aparelho vinculado</span>
+                    <Link href="/inventory/corporate-lines">Ver linhas</Link>
+                  </div>
+                )}
+                {(dashboard.counts.peopleWithoutEquipment ?? 0) > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>⚠ <strong>{dashboard.counts.peopleWithoutEquipment}</strong> colaborador(es) ativo(s) sem nenhum equipamento</span>
+                    <Link href="/inventory/people">Ver colaboradores</Link>
+                  </div>
+                )}
+                {(dashboard.counts.expiringSoon ?? 0) > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>⚠ <strong>{dashboard.counts.expiringSoon}</strong> garantia(s) vencendo nos próximos 30 dias</span>
+                    <Link href="/inventory/reports">Ver relatório</Link>
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
+
           <section className={styles.card} style={{ marginBottom: '1rem' }}>
             <div className={styles.pageHeader} style={{ marginBottom: '0.75rem' }}>
               <h2>Equipamentos por categoria</h2>

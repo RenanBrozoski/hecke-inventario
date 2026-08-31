@@ -36,3 +36,9 @@ export async function getBitrixUser(id: string): Promise<BitrixUser | null> {
   const result = await post<BitrixUser[]>('user.get', { FILTER: { ID: id } })
   return Array.isArray(result) && result.length > 0 ? (result[0] ?? null) : null
 }
+
+export async function getAllActiveBitrixUsers(): Promise<BitrixUser[]> {
+  const result = await post<BitrixUser[]>('user.get', { FILTER: { ACTIVE: true } })
+  if (!Array.isArray(result)) return []
+  return result.slice(0, 200)
+}

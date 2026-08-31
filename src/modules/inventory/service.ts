@@ -268,6 +268,8 @@ export async function getInventoryDashboard(portalId: string) {
     byStatus,
     byCategory,
     recentMovements,
+    linesWithoutEquipment,
+    peopleWithoutEquipment,
   ] = await Promise.all([
     prisma.inventoryEquipment.count({ where: { portalId, archivedAt: null } }),
     prisma.inventoryPerson.count({ where: { portalId, archivedAt: null } }),
@@ -306,6 +308,12 @@ export async function getInventoryDashboard(portalId: string) {
       take: 10,
       include: { equipment: { select: { id: true, patrimony: true, assetTag: true, name: true } } },
     }),
+    prisma.inventoryCorporateLine.count({
+      where: { portalId, archivedAt: null, equipmentId: null, status: 'ACTIVE' },
+    }),
+    prisma.inventoryPerson.count({
+      where: { portalId, archivedAt: null, status: 'ACTIVE', equipment: { none: {} } },
+    }),
   ])
 
   return {
@@ -321,6 +329,8 @@ export async function getInventoryDashboard(portalId: string) {
       withoutHolder,
       expired,
       expiringSoon,
+      linesWithoutEquipment,
+      peopleWithoutEquipment,
     },
     equipmentByStatus: Object.fromEntries(byStatus.map((row) => [row.status, row._count._all])),
     equipmentByCategory: byCategory.map((category) => ({

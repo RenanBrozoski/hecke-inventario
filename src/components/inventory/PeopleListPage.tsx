@@ -10,6 +10,7 @@ import type {
   InventoryLookupsResponse,
   PeopleListResponse,
 } from './types'
+import { SearchableSelect } from './SearchableSelect'
 import styles from './inventory.module.css'
 
 export function PeopleListPage() {
@@ -22,6 +23,20 @@ const BITRIX_STATUS_LABELS: Record<string, string> = {
   UNREVIEWED: 'Não revisado',
   AMBIGUOUS: 'Ambíguo',
   REJECTED: 'Rejeitado',
+}
+
+type AutoMatchSuggestion = {
+  person: { id: string; name: string; revision: number }
+  matches: { bitrixId: string; bitrixName: string; email: string }[]
+}
+
+type BitrixImportUser = {
+  bitrixId: string
+  bitrixName: string
+  email: string
+  alreadyLinked: boolean
+  linkedPersonId: string | null
+  linkedPersonName: string | null
 }
 
 function PeopleListContent({ context }: { context: InventoryContextResponse }) {
@@ -40,6 +55,18 @@ function PeopleListContent({ context }: { context: InventoryContextResponse }) {
   const [lookups, setLookups] = useState<InventoryLookupsResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [showAutoMatch, setShowAutoMatch] = useState(false)
+  const [autoMatchSuggestions, setAutoMatchSuggestions] = useState<AutoMatchSuggestion[] | null>(null)
+  const [autoMatchLoading, setAutoMatchLoading] = useState(false)
+  const [autoMatchError, setAutoMatchError] = useState<string | null>(null)
+  const [autoMatchProcessing, setAutoMatchProcessing] = useState<Set<string>>(new Set())
+  const [autoMatchSkipped, setAutoMatchSkipped] = useState<Set<string>>(new Set())
+  const [showImport, setShowImport] = useState(false)
+  const [importUsers, setImportUsers] = useState<BitrixImportUser[] | null>(null)
+  const [importLoading, setImportLoading] = useState(false)
+  const [importError, setImportError] = useState<string | null>(null)
+  const [importSelected, setImportSelected] = useState<Set<string>>(new Set())
+  const [importing, setImporting] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -89,6 +116,112 @@ function PeopleListContent({ context }: { context: InventoryContextResponse }) {
     setPage(1)
   }
 
+  async function downloadCSV() {
+    const params = new URLSearchParams()
+    for (const [key, value] of Object.entries(applied)) if (value) params.set(key, String(value))
+    try {
+      const response = await authorizedFetch(`/api/inventory/reports/people.csv?${params}`)
+      if (!response.ok) return
+      const blob = await response.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url; a.download = 'colaboradores.csv'
+      document.body.append(a); a.click()
+      URL.revokeObjectURL(url); a.remove()
+    } catch { /* silently fail */ }
+  }
+
+  async function loadAutoMatch() {
+    setAutoMatchLoading(true)
+    setAutoMatchError(null)
+    try {
+      const response = await authorizedFetch('/api/inventory/bitrix-suggest')
+      if (!response.ok) throw new Error('Não foi possível buscar sugestões.')
+      setAutoMatchSuggestions((await response.json()) as AutoMatchSuggestion[])
+      setAutoMatchSkipped(new Set())
+    } catch (cause) {
+      setAutoMatchError(cause instanceof Error ? cause.message : 'Falha ao buscar sugestões.')
+    } finally {
+      setAutoMatchLoading(false)
+    }
+  }
+
+  function toggleAutoMatch() {
+    if (!showAutoMatch && autoMatchSuggestions === null) void loadAutoMatch()
+    setShowAutoMatch((prev) => !prev)
+  }
+
+  async function loadImportPreview() {
+    setImportLoading(true)
+    setImportError(null)
+    try {
+      const response = await authorizedFetch('/api/inventory/bitrix-import')
+      if (!response.ok) throw new Error('Não foi possível buscar os usuários do Bitrix24.')
+      const { users } = (await response.json()) as { users: BitrixImportUser[] }
+      setImportUsers(users)
+      setImportSelected(new Set(users.filter((u) => !u.alreadyLinked).map((u) => u.bitrixId)))
+    } catch (cause) {
+      setImportError(cause instanceof Error ? cause.message : 'Falha ao carregar.')
+    } finally {
+      setImportLoading(false)
+    }
+  }
+
+  function toggleImportOpen() {
+    if (!showImport && importUsers === null) void loadImportPreview()
+    setShowImport((prev) => !prev)
+  }
+
+  function toggleImportUser(bitrixId: string) {
+    setImportSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(bitrixId)) next.delete(bitrixId)
+      else next.add(bitrixId)
+      return next
+    })
+  }
+
+  async function runImport() {
+    if (importSelected.size === 0) return
+    setImporting(true)
+    setImportError(null)
+    try {
+      const response = await authorizedFetch('/api/inventory/bitrix-import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userIds: Array.from(importSelected) }),
+      })
+      if (!response.ok) throw new Error(await readApiError(response, 'Erro ao importar.'))
+      const { created, skipped } = (await response.json()) as { created: number; skipped: number }
+      setImportUsers(null)
+      setShowImport(false)
+      void load()
+      alert(`${created} colaborador(es) importado(s).${skipped > 0 ? ` ${skipped} já existia(m).` : ''}`)
+    } catch (cause) {
+      setImportError(cause instanceof Error ? cause.message : 'Falha ao importar.')
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  async function confirmMatch(personId: string, revision: number, bitrixUserId: string) {
+    setAutoMatchProcessing((prev) => new Set(prev).add(personId))
+    try {
+      const response = await authorizedFetch(`/api/inventory/people/${personId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ revision, bitrixUserId }),
+      })
+      if (!response.ok) throw new Error(await readApiError(response, 'Não foi possível vincular.'))
+      setAutoMatchSkipped((prev) => new Set(prev).add(personId))
+      void load()
+    } catch (cause) {
+      setAutoMatchError(cause instanceof Error ? cause.message : 'Falha ao vincular.')
+    } finally {
+      setAutoMatchProcessing((prev) => { const next = new Set(prev); next.delete(personId); return next })
+    }
+  }
+
   const totalPages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1
 
   return (
@@ -100,11 +233,16 @@ function PeopleListContent({ context }: { context: InventoryContextResponse }) {
             {data ? `${data.total} pessoa(s) encontrada(s)` : 'Responsáveis e histórico de custódia'}
           </p>
         </div>
-        {context.canEdit && (
-          <Link href="/inventory/people/new">
-            <button type="button" className="primary">+ Novo colaborador</button>
-          </Link>
-        )}
+        <div className={styles.actions}>
+          <button type="button" onClick={() => void downloadCSV()}>↓ Exportar CSV</button>
+          <button type="button" onClick={toggleAutoMatch}>⟳ Auto-vincular B24</button>
+          <button type="button" onClick={toggleImportOpen}>↑ Importar do Bitrix24</button>
+          {context.canEdit && (
+            <Link href="/inventory/people/new">
+              <button type="button" className="primary">+ Novo colaborador</button>
+            </Link>
+          )}
+        </div>
       </header>
 
       <form className={styles.filters} onSubmit={applyFilter}>
@@ -128,12 +266,12 @@ function PeopleListContent({ context }: { context: InventoryContextResponse }) {
         </div>
         <div className={styles.field}>
           <label htmlFor="people-dept">Setor</label>
-          <select id="people-dept" value={departmentId} onChange={(e) => setDepartmentId(e.target.value)}>
-            <option value="">Todos</option>
-            {lookups?.departments.map((d) => (
-              <option key={d.id} value={d.id}>{d.name}</option>
-            ))}
-          </select>
+          <SearchableSelect
+            id="people-dept"
+            value={departmentId}
+            onChange={setDepartmentId}
+            options={lookups?.departments.map((d) => ({ value: d.id, label: d.name })) ?? []}
+          />
         </div>
         <div className={styles.field}>
           <label htmlFor="people-emp">Vínculo</label>
@@ -166,6 +304,151 @@ function PeopleListContent({ context }: { context: InventoryContextResponse }) {
           <button type="button" onClick={clearFilter}>Limpar</button>
         </div>
       </form>
+
+      {showAutoMatch && (
+        <div className={styles.card} style={{ marginBottom: '1rem' }}>
+          <div className={styles.pageHeader} style={{ marginBottom: '0.75rem' }}>
+            <h2 style={{ margin: 0 }}>Auto-vincular ao Bitrix24</h2>
+            <div className={styles.actions}>
+              <button type="button" onClick={() => void loadAutoMatch()} disabled={autoMatchLoading}>Recarregar</button>
+              <button type="button" onClick={() => setShowAutoMatch(false)}>Fechar</button>
+            </div>
+          </div>
+          {autoMatchError && <p className="alert alert-error">{autoMatchError}</p>}
+          {autoMatchLoading && <p className={styles.loading}>Buscando correspondências no Bitrix24…</p>}
+          {!autoMatchLoading && autoMatchSuggestions !== null && (() => {
+            const visible = autoMatchSuggestions.filter((s) => !autoMatchSkipped.has(s.person.id))
+            return visible.length === 0 ? (
+              <p className={styles.empty}>Nenhuma sugestão encontrada. Todos os colaboradores já estão vinculados ou foram ignorados.</p>
+            ) : (
+              <>
+                <div className={styles.tableWrap}>
+                  <table>
+                    <thead><tr><th>Colaborador</th><th>Correspondências no Bitrix24</th><th></th></tr></thead>
+                    <tbody>
+                      {visible.map(({ person, matches }) => (
+                        <tr key={person.id}>
+                          <td><Link href={`/inventory/people/${person.id}`}>{person.name}</Link></td>
+                          <td>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                              {matches.map((m) => (
+                                <div key={m.bitrixId} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                  <span style={{ fontSize: '0.9rem' }}>{m.bitrixName}{m.email ? ` · ${m.email}` : ''}</span>
+                                  <button
+                                    type="button"
+                                    className="primary"
+                                    style={{ padding: '0.1rem 0.5rem', fontSize: '0.78rem' }}
+                                    disabled={autoMatchProcessing.has(person.id)}
+                                    onClick={() => void confirmMatch(person.id, person.revision, m.bitrixId)}
+                                  >
+                                    {autoMatchProcessing.has(person.id) ? '…' : 'Vincular'}
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          </td>
+                          <td>
+                            <button
+                              type="button"
+                              style={{ fontSize: '0.8rem', opacity: 0.65 }}
+                              onClick={() => setAutoMatchSkipped((prev) => new Set(prev).add(person.id))}
+                            >
+                              Pular
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p style={{ marginTop: '0.5rem', fontSize: '0.82rem', opacity: 0.65 }}>
+                  Mostrando até 25 colaboradores ativos sem vínculo Bitrix24. Após vincular, recarregue para ver as mudanças na lista.
+                </p>
+              </>
+            )
+          })()}
+        </div>
+      )}
+
+      {showImport && (
+        <div className={styles.card} style={{ marginBottom: '1rem' }}>
+          <div className={styles.pageHeader} style={{ marginBottom: '0.75rem' }}>
+            <h2 style={{ margin: 0 }}>Importar colaboradores do Bitrix24</h2>
+            <div className={styles.actions}>
+              <button type="button" onClick={() => void loadImportPreview()} disabled={importLoading}>Recarregar</button>
+              <button type="button" onClick={() => setShowImport(false)}>Fechar</button>
+            </div>
+          </div>
+          <p style={{ marginBottom: '0.75rem', fontSize: '0.88rem', opacity: 0.75 }}>
+            Usuários ativos do Bitrix24. Selecione os que deseja criar como colaboradores. Já vinculados são mostrados apenas como referência.
+          </p>
+          {importError && <p className="alert alert-error">{importError}</p>}
+          {importLoading && <p className={styles.loading}>Buscando usuários do Bitrix24…</p>}
+          {!importLoading && importUsers !== null && (
+            <>
+              <div className={styles.tableWrap} style={{ maxHeight: 360, overflowY: 'auto' }}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th style={{ width: 32 }}>
+                        <input
+                          type="checkbox"
+                          checked={importSelected.size > 0 && importSelected.size === importUsers.filter((u) => !u.alreadyLinked).length}
+                          onChange={(e) => {
+                            if (e.target.checked) setImportSelected(new Set(importUsers.filter((u) => !u.alreadyLinked).map((u) => u.bitrixId)))
+                            else setImportSelected(new Set())
+                          }}
+                        />
+                      </th>
+                      <th>Nome no Bitrix24</th>
+                      <th>E-mail</th>
+                      <th>No sistema</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {importUsers.map((u) => (
+                      <tr key={u.bitrixId} style={{ opacity: u.alreadyLinked ? 0.55 : 1 }}>
+                        <td>
+                          <input
+                            type="checkbox"
+                            checked={importSelected.has(u.bitrixId)}
+                            disabled={u.alreadyLinked}
+                            onChange={() => toggleImportUser(u.bitrixId)}
+                          />
+                        </td>
+                        <td>{u.bitrixName}</td>
+                        <td style={{ fontSize: '0.85rem' }}>{u.email || '—'}</td>
+                        <td>
+                          {u.alreadyLinked ? (
+                            <Link href={`/inventory/people/${u.linkedPersonId}`} style={{ fontSize: '0.85rem' }}>
+                              {u.linkedPersonName}
+                            </Link>
+                          ) : (
+                            <span style={{ fontSize: '0.82rem', opacity: 0.55 }}>Não cadastrado</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  className="primary"
+                  disabled={importing || importSelected.size === 0}
+                  onClick={() => void runImport()}
+                >
+                  {importing ? 'Importando…' : `Importar ${importSelected.size} selecionado(s)`}
+                </button>
+                <span style={{ fontSize: '0.82rem', opacity: 0.6 }}>
+                  {importUsers.filter((u) => u.alreadyLinked).length} já vinculado(s) · {importUsers.filter((u) => !u.alreadyLinked).length} novo(s)
+                </span>
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {error && <p className="alert alert-error">{error}</p>}
       {loading && <p className={styles.loading}>Carregando colaboradores…</p>}

@@ -10,9 +10,33 @@ import type {
   EquipmentListResponse,
   EquipmentSummary,
   InventoryContextResponse,
+  InventoryFieldLookup,
   InventoryLookupsResponse,
 } from './types'
+import { SearchableSelect } from './SearchableSelect'
 import styles from './inventory.module.css'
+
+// ── Column visibility (localStorage per categoryId or 'all') ──────────────
+const BUILTIN_COLS = ['patrimony', 'category', 'status', 'holder', 'department', 'location'] as const
+type BuiltinCol = (typeof BUILTIN_COLS)[number]
+
+function colsKey(categoryId: string) {
+  return `inv:cols:${categoryId || 'all'}`
+}
+
+function loadHiddenCols(categoryId: string): Set<string> {
+  try {
+    const raw = localStorage.getItem(colsKey(categoryId))
+    if (raw) return new Set(JSON.parse(raw) as string[])
+  } catch { /* ignore */ }
+  return new Set()
+}
+
+function saveHiddenCols(categoryId: string, hidden: Set<string>) {
+  try {
+    localStorage.setItem(colsKey(categoryId), JSON.stringify(Array.from(hidden)))
+  } catch { /* ignore */ }
+}
 
 type SortField =
   | 'updatedAt'
@@ -103,6 +127,8 @@ function EquipmentListContent({ context }: { context: InventoryContextResponse }
   const [loading, setLoading] = useState(true)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [exporting, setExporting] = useState(false)
+  const [hiddenCols, setHiddenCols] = useState<Set<string>>(new Set())
+  const [colPickerOpen, setColPickerOpen] = useState(false)
 
   const lookupsLoaded = useRef(false)
   const initialGroupApplied = useRef(false)
@@ -161,6 +187,11 @@ function EquipmentListContent({ context }: { context: InventoryContextResponse }
     setDraft(next)
     setPage(1)
   }, [filters, lookups])
+
+  // Load column prefs when category changes
+  useEffect(() => {
+    setHiddenCols(loadHiddenCols(filters.categoryId))
+  }, [filters.categoryId])
 
   // Keep URL in sync with current state
   useEffect(() => {
@@ -227,6 +258,37 @@ function EquipmentListContent({ context }: { context: InventoryContextResponse }
     filters.locationId ||
     filters.archived !== 'exclude'
 
+  // Custom fields marked listVisible from current page items
+  const customCols: InventoryFieldLookup[] = (() => {
+    if (!data?.items.length) return []
+    const seen = new Map<string, InventoryFieldLookup>()
+    for (const item of data.items) {
+      for (const f of item.category.fields ?? []) {
+        if (f.listVisible && f.type !== 'PASSWORD' && !seen.has(f.key)) seen.set(f.key, f)
+      }
+    }
+    return Array.from(seen.values())
+  })()
+
+  const allColLabels: Record<string, string> = {
+    patrimony: 'Código interno',
+    category: 'Categoria',
+    status: 'Situação',
+    holder: 'Responsável',
+    department: 'Setor',
+    location: 'Local',
+    ...Object.fromEntries(customCols.map((f) => [f.key, f.label])),
+  }
+
+  function toggleCol(key: string) {
+    const next = new Set(hiddenCols)
+    if (next.has(key)) next.delete(key); else next.add(key)
+    setHiddenCols(next)
+    saveHiddenCols(filters.categoryId, next)
+  }
+
+  function colVisible(key: string) { return !hiddenCols.has(key) }
+
   // Build CSV export URL with current filters
   function exportUrl() {
     const params = new URLSearchParams()
@@ -273,6 +335,29 @@ function EquipmentListContent({ context }: { context: InventoryContextResponse }
           </p>
         </div>
         <div className={styles.actions}>
+          <div style={{ position: 'relative' }}>
+            <button type="button" onClick={() => setColPickerOpen((v) => !v)}>
+              ⚙ Colunas
+            </button>
+            {colPickerOpen && (
+              <div className={styles.colPicker}>
+                <strong>Colunas visíveis</strong>
+                {Object.entries(allColLabels).map(([key, label]) => (
+                  <label key={key} className={styles.colPickerRow}>
+                    <input
+                      type="checkbox"
+                      checked={colVisible(key)}
+                      onChange={() => toggleCol(key)}
+                    />
+                    {label}
+                  </label>
+                ))}
+                <button type="button" className={styles.colPickerClose} onClick={() => setColPickerOpen(false)}>
+                  Fechar
+                </button>
+              </div>
+            )}
+          </div>
           <button type="button" onClick={() => void downloadCsv()} disabled={exporting}>
             {exporting ? 'Gerando CSV…' : '↓ Exportar CSV'}
           </button>
@@ -330,48 +415,33 @@ function EquipmentListContent({ context }: { context: InventoryContextResponse }
           </div>
           <div className={styles.field}>
             <label htmlFor="eq-category">Categoria</label>
-            <select
+            <SearchableSelect
               id="eq-category"
               value={draft.categoryId}
-              onChange={(e) => setDraft({ ...draft, categoryId: e.target.value, categoryIds: '' })}
-            >
-              <option value="">Todas</option>
-              {lookups?.categories.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
+              onChange={(v) => setDraft({ ...draft, categoryId: v, categoryIds: '' })}
+              options={lookups?.categories.map((item) => ({ value: item.id, label: item.name })) ?? []}
+              emptyLabel="Todas"
+            />
           </div>
           <div className={styles.field}>
             <label htmlFor="eq-dept">Setor</label>
-            <select
+            <SearchableSelect
               id="eq-dept"
               value={draft.departmentId}
-              onChange={(e) => setDraft({ ...draft, departmentId: e.target.value })}
-            >
-              <option value="">Todos</option>
-              {lookups?.departments.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
+              onChange={(v) => setDraft({ ...draft, departmentId: v })}
+              options={lookups?.departments.map((item) => ({ value: item.id, label: item.name })) ?? []}
+              emptyLabel="Todos"
+            />
           </div>
           <div className={styles.field}>
             <label htmlFor="eq-location">Local</label>
-            <select
+            <SearchableSelect
               id="eq-location"
               value={draft.locationId}
-              onChange={(e) => setDraft({ ...draft, locationId: e.target.value })}
-            >
-              <option value="">Todos</option>
-              {lookups?.locations.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
+              onChange={(v) => setDraft({ ...draft, locationId: v })}
+              options={lookups?.locations.map((item) => ({ value: item.id, label: item.name })) ?? []}
+              emptyLabel="Todos"
+            />
           </div>
           <div className={styles.field}>
             <label htmlFor="eq-archived">Arquivados</label>
@@ -423,24 +493,15 @@ function EquipmentListContent({ context }: { context: InventoryContextResponse }
                       title="Selecionar todos"
                     />
                   </th>
-                  <SortHeader field="patrimony" current={filters} onSort={handleSort}>
-                    Código interno
-                  </SortHeader>
-                  <SortHeader field="category" current={filters} onSort={handleSort}>
-                    Categoria
-                  </SortHeader>
-                  <SortHeader field="status" current={filters} onSort={handleSort}>
-                    Situação
-                  </SortHeader>
-                  <SortHeader field="holder" current={filters} onSort={handleSort}>
-                    Responsável
-                  </SortHeader>
-                  <SortHeader field="department" current={filters} onSort={handleSort}>
-                    Setor
-                  </SortHeader>
-                  <SortHeader field="location" current={filters} onSort={handleSort}>
-                    Local
-                  </SortHeader>
+                  {colVisible('patrimony') && <SortHeader field="patrimony" current={filters} onSort={handleSort}>Código interno</SortHeader>}
+                  {colVisible('category') && <SortHeader field="category" current={filters} onSort={handleSort}>Categoria</SortHeader>}
+                  {colVisible('status') && <SortHeader field="status" current={filters} onSort={handleSort}>Situação</SortHeader>}
+                  {colVisible('holder') && <SortHeader field="holder" current={filters} onSort={handleSort}>Responsável</SortHeader>}
+                  {colVisible('department') && <SortHeader field="department" current={filters} onSort={handleSort}>Setor</SortHeader>}
+                  {colVisible('location') && <SortHeader field="location" current={filters} onSort={handleSort}>Local</SortHeader>}
+                  {customCols.filter((f) => colVisible(f.key)).map((f) => (
+                    <th key={f.key}>{f.label}</th>
+                  ))}
                   <th style={{ width: context.canEdit ? 120 : 60 }}></th>
                 </tr>
               </thead>
@@ -452,6 +513,8 @@ function EquipmentListContent({ context }: { context: InventoryContextResponse }
                     canEdit={context.canEdit}
                     selected={selectedIds.has(item.id)}
                     onToggle={toggleSelect}
+                    hiddenCols={hiddenCols}
+                    customCols={customCols}
                   />
                 ))}
               </tbody>
@@ -542,15 +605,21 @@ function EquipmentRow({
   canEdit,
   selected,
   onToggle,
+  hiddenCols,
+  customCols,
 }: {
   item: EquipmentSummary
   canEdit: boolean
   selected: boolean
   onToggle: (id: string) => void
+  hiddenCols: Set<string>
+  customCols: InventoryFieldLookup[]
 }) {
   const tone = statusTone(item.status)
   const label = equipmentLabel(item)
   const isArchived = !!item.archivedAt
+  const colVisible = (key: string) => !hiddenCols.has(key)
+  const specs = (item.specs ?? {}) as Record<string, unknown>
 
   return (
     <tr className={isArchived ? styles.rowArchived : ''}>
@@ -562,34 +631,48 @@ function EquipmentRow({
           title="Selecionar"
         />
       </td>
-      <td>
-        <Link href={`/inventory/equipment/${item.id}`} className={styles.equipmentLink}>
-          {label}
-        </Link>
-        <div className={styles.timelineMeta}>
-          {[item.assetTag && `TAG ${item.assetTag}`, item.serialNumber && `S/N ${item.serialNumber}`]
-            .filter(Boolean)
-            .join(' · ') || null}
-        </div>
-        {isArchived && (
-          <span className={`${styles.badge} ${styles.archivedBadge}`}>Arquivado</span>
-        )}
-      </td>
-      <td>{item.category.name}</td>
-      <td>
-        <span className={`${styles.badge} ${tone === 'neutral' ? '' : styles[tone]}`}>
-          {EQUIPMENT_STATUS_LABELS[item.status]}
-        </span>
-      </td>
-      <td>
-        {item.currentHolder ? (
-          <Link href={`/inventory/people/${item.currentHolder.id}`}>{item.currentHolder.name}</Link>
-        ) : (
-          <span className={styles.muted}>—</span>
-        )}
-      </td>
-      <td>{item.department?.name ?? <span className={styles.muted}>—</span>}</td>
-      <td>{item.location?.name ?? <span className={styles.muted}>—</span>}</td>
+      {colVisible('patrimony') && (
+        <td>
+          <Link href={`/inventory/equipment/${item.id}`} className={styles.equipmentLink}>
+            {label}
+          </Link>
+          <div className={styles.timelineMeta}>
+            {[item.assetTag && `TAG ${item.assetTag}`, item.serialNumber && `S/N ${item.serialNumber}`]
+              .filter(Boolean)
+              .join(' · ') || null}
+          </div>
+          {isArchived && (
+            <span className={`${styles.badge} ${styles.archivedBadge}`}>Arquivado</span>
+          )}
+        </td>
+      )}
+      {colVisible('category') && <td>{item.category.name}</td>}
+      {colVisible('status') && (
+        <td>
+          <span className={`${styles.badge} ${tone === 'neutral' ? '' : styles[tone]}`}>
+            {EQUIPMENT_STATUS_LABELS[item.status]}
+          </span>
+        </td>
+      )}
+      {colVisible('holder') && (
+        <td>
+          {item.currentHolder ? (
+            <Link href={`/inventory/people/${item.currentHolder.id}`}>{item.currentHolder.name}</Link>
+          ) : (
+            <span className={styles.muted}>—</span>
+          )}
+        </td>
+      )}
+      {colVisible('department') && <td>{item.department?.name ?? <span className={styles.muted}>—</span>}</td>}
+      {colVisible('location') && <td>{item.location?.name ?? <span className={styles.muted}>—</span>}</td>}
+      {customCols.filter((f) => colVisible(f.key)).map((f) => {
+        const val = specs[f.key]
+        return (
+          <td key={f.key} className={styles.muted}>
+            {val != null && val !== '' ? String(val) : '—'}
+          </td>
+        )
+      })}
       <td>
         <div className={styles.rowActions}>
           <Link href={`/inventory/equipment/${item.id}`}>Ver</Link>

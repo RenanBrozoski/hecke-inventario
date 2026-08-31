@@ -707,7 +707,7 @@ function AccessSettings({
           <Field label="Papel">
             <select value={role} onChange={(event) => setRole(event.target.value as InventoryRole)}>
               <option value="VIEWER">Consulta</option>
-              <option value="OPERATOR">Operador</option>
+              <option value="OPERATOR">Suporte</option>
               <option value="ADMIN">Administrador</option>
             </select>
           </Field>
@@ -733,7 +733,7 @@ function AccessSettings({
                   {assignment.role === 'ADMIN'
                     ? 'Administrador'
                     : assignment.role === 'OPERATOR'
-                      ? 'Operador'
+                      ? 'Suporte'
                       : 'Consulta'}
                 </td>
                 <td>

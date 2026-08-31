@@ -38,6 +38,7 @@ const NAV_SECTIONS: NavigationSection[] = [
     label: 'Administração',
     items: [
       { href: '/inventory/custom', label: 'Personalizados', icon: '＋' },
+      { href: '/inventory/agents', label: 'Agentes', icon: '⬡', adminOnly: true },
       { href: '/inventory/audit', label: 'Auditoria', icon: '◑', adminOnly: true },
       { href: '/inventory/imports', label: 'Importar planilha', icon: '⇧', adminOnly: true },
       { href: '/inventory/settings', label: 'Configurações', icon: '⚙', adminOnly: true },
@@ -112,7 +113,7 @@ export function InventoryGate({ children }: InventoryGateProps) {
           })}
         </nav>
         <div className={styles.sidebarFooter}>
-          <span className={styles.role} title="Papel de acesso ao inventário">{context.role === 'ADMIN' ? 'Administrador' : context.role === 'OPERATOR' ? 'Operador' : 'Consulta'}</span>
+          <span className={styles.role} title="Papel de acesso ao inventário">{context.role === 'ADMIN' ? 'Administrador' : context.role === 'OPERATOR' ? 'Suporte' : 'Consulta'}</span>
           <small>Acesso controlado</small>
         </div>
       </aside>

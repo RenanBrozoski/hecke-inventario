@@ -235,6 +235,8 @@ export interface DashboardResponse {
     withoutHolder?: number
     expiringSoon?: number
     expired?: number
+    linesWithoutEquipment?: number
+    peopleWithoutEquipment?: number
   }
   equipmentByStatus: Partial<Record<EquipmentStatus, number>>
   equipmentByCategory: Array<{

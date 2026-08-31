@@ -47,6 +47,7 @@ function PersonDetailContent({
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [archiving, setArchiving] = useState(false)
+  const [bitrixUserName, setBitrixUserName] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -65,6 +66,14 @@ function PersonDetailContent({
   useEffect(() => {
     void load()
   }, [load])
+
+  useEffect(() => {
+    if (!person?.bitrixUserId) { setBitrixUserName(null); return }
+    void authorizedFetch(`/api/inventory/bitrix-users?id=${encodeURIComponent(person.bitrixUserId)}`)
+      .then(async (r) => r.ok ? r.json() : null)
+      .then((u: { name: string; email: string } | null) => setBitrixUserName(u ? `${u.name}${u.email ? ` <${u.email}>` : ''}` : null))
+      .catch(() => setBitrixUserName(null))
+  }, [authorizedFetch, person?.bitrixUserId])
 
   if (loading) return <p className={styles.loading}>Carregando colaborador…</p>
   if (error) return <p className="alert alert-error">{error}</p>
@@ -138,7 +147,7 @@ function PersonDetailContent({
             <dt>Vínculo</dt>
             <dd>{person.employmentType ? EMPLOYMENT_TYPE_LABELS[person.employmentType] : '—'}</dd>
             <dt>Usuário Bitrix</dt>
-            <dd>{person.bitrixUserId ? `#${person.bitrixUserId}` : 'Não vinculado'}</dd>
+            <dd>{person.bitrixUserId ? (bitrixUserName ?? `#${person.bitrixUserId}`) : 'Não vinculado'}</dd>
             <dt>Cadastrado em</dt>
             <dd>{formatDateTime(person.createdAt)}</dd>
           </dl>
