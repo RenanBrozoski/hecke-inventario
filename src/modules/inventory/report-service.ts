@@ -55,9 +55,17 @@ export async function listInventoryExpirations(
   const windowEnd = new Date(today)
   windowEnd.setUTCDate(windowEnd.getUTCDate() + query.windowDays)
 
+  // Filter equipment at DB level: expired items OR items expiring within the window
+  const warrantyFilter: Prisma.DateTimeNullableFilter =
+    query.status === 'expired'
+      ? { lt: today }
+      : query.status === 'upcoming'
+        ? { gte: today, lte: windowEnd }
+        : { lte: windowEnd } // 'all': expired + upcoming within window
+
   const [equipment, modules] = await Promise.all([
     prisma.inventoryEquipment.findMany({
-      where: { portalId, archivedAt: null, warrantyEndsAt: { not: null } },
+      where: { portalId, archivedAt: null, warrantyEndsAt: warrantyFilter },
       select: {
         id: true,
         patrimony: true,

@@ -60,64 +60,80 @@ export async function syncPortalUsersAndDepartments(portalId: string): Promise<S
       headBitrixUserId: d.UF_HEAD ? String(d.UF_HEAD) : null,
     }))
 
-    for (const dept of rawDepartments) {
-      await prisma.bitrixDepartment.upsert({
-        where: { portalId_bitrixDepartmentId: { portalId, bitrixDepartmentId: String(dept.ID) } },
-        create: {
-          portalId,
-          bitrixDepartmentId: String(dept.ID),
-          name: dept.NAME,
-          parentBitrixDepartmentId: dept.PARENT ? String(dept.PARENT) : null,
-          headBitrixUserId: dept.UF_HEAD ? String(dept.UF_HEAD) : null,
-          active: true,
-          lastSyncedAt: new Date(),
-          lastSeenSyncId: runId,
-        },
-        update: {
-          name: dept.NAME,
-          parentBitrixDepartmentId: dept.PARENT ? String(dept.PARENT) : null,
-          headBitrixUserId: dept.UF_HEAD ? String(dept.UF_HEAD) : null,
-          active: true,
-          lastSyncedAt: new Date(),
-          lastSeenSyncId: runId,
-        },
-      })
-    }
+    const syncedAt = new Date()
 
-    for (const user of rawUsers) {
-      const departmentIds = (user.UF_DEPARTMENT ?? []).map(String)
-      const managerBitrixUserId = deriveManagerBitrixUserId(String(user.ID), departmentIds, departmentLookup)
-      const fullName = [user.NAME, user.LAST_NAME].filter(Boolean).join(' ').trim() || `Usuário ${user.ID}`
+    // Batch all department upserts in a single transaction (one round-trip)
+    await prisma.$transaction(
+      rawDepartments.map((dept) =>
+        prisma.bitrixDepartment.upsert({
+          where: { portalId_bitrixDepartmentId: { portalId, bitrixDepartmentId: String(dept.ID) } },
+          create: {
+            portalId,
+            bitrixDepartmentId: String(dept.ID),
+            name: dept.NAME,
+            parentBitrixDepartmentId: dept.PARENT ? String(dept.PARENT) : null,
+            headBitrixUserId: dept.UF_HEAD ? String(dept.UF_HEAD) : null,
+            active: true,
+            lastSyncedAt: syncedAt,
+            lastSeenSyncId: runId,
+          },
+          update: {
+            name: dept.NAME,
+            parentBitrixDepartmentId: dept.PARENT ? String(dept.PARENT) : null,
+            headBitrixUserId: dept.UF_HEAD ? String(dept.UF_HEAD) : null,
+            active: true,
+            lastSyncedAt: syncedAt,
+            lastSeenSyncId: runId,
+          },
+        }),
+      ),
+    )
 
-      await prisma.bitrixUser.upsert({
-        where: { portalId_bitrixUserId: { portalId, bitrixUserId: String(user.ID) } },
-        create: {
-          portalId,
-          bitrixUserId: String(user.ID),
-          firstName: user.NAME ?? null,
-          lastName: user.LAST_NAME ?? null,
-          fullName,
-          email: user.EMAIL ?? null,
-          position: user.WORK_POSITION ?? null,
-          active: user.ACTIVE !== false,
-          departmentIds,
-          managerBitrixUserId,
-          lastSyncedAt: new Date(),
-          lastSeenSyncId: runId,
-        },
-        update: {
-          firstName: user.NAME ?? null,
-          lastName: user.LAST_NAME ?? null,
-          fullName,
-          email: user.EMAIL ?? null,
-          position: user.WORK_POSITION ?? null,
-          active: user.ACTIVE !== false,
-          departmentIds,
-          managerBitrixUserId,
-          lastSyncedAt: new Date(),
-          lastSeenSyncId: runId,
-        },
-      })
+    // Batch all user upserts in chunks of 100 to avoid oversized transactions
+    const CHUNK = 100
+    for (let i = 0; i < rawUsers.length; i += CHUNK) {
+      const chunk = rawUsers.slice(i, i + CHUNK)
+      await prisma.$transaction(
+        chunk.map((user) => {
+          const departmentIds = (user.UF_DEPARTMENT ?? []).map(String)
+          const managerBitrixUserId = deriveManagerBitrixUserId(
+            String(user.ID),
+            departmentIds,
+            departmentLookup,
+          )
+          const fullName =
+            [user.NAME, user.LAST_NAME].filter(Boolean).join(' ').trim() || `Usuário ${user.ID}`
+          return prisma.bitrixUser.upsert({
+            where: { portalId_bitrixUserId: { portalId, bitrixUserId: String(user.ID) } },
+            create: {
+              portalId,
+              bitrixUserId: String(user.ID),
+              firstName: user.NAME ?? null,
+              lastName: user.LAST_NAME ?? null,
+              fullName,
+              email: user.EMAIL ?? null,
+              position: user.WORK_POSITION ?? null,
+              active: user.ACTIVE !== false,
+              departmentIds,
+              managerBitrixUserId,
+              lastSyncedAt: syncedAt,
+              lastSeenSyncId: runId,
+            },
+            update: {
+              firstName: user.NAME ?? null,
+              lastName: user.LAST_NAME ?? null,
+              fullName,
+              email: user.EMAIL ?? null,
+              position: user.WORK_POSITION ?? null,
+              active: user.ACTIVE !== false,
+              departmentIds,
+              managerBitrixUserId,
+              lastSyncedAt: syncedAt,
+              lastSeenSyncId: runId,
+            },
+          })
+        }),
+      )
     }
 
     // Só agora — com a paginação inteira de usuários E departamentos concluída

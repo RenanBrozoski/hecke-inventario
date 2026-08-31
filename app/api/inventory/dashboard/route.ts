@@ -1,3 +1,4 @@
+import { unstable_cache } from 'next/cache'
 import {
   inventoryErrorResponse,
   jsonOk,
@@ -10,7 +11,12 @@ export const dynamic = 'force-dynamic'
 export async function GET(request: Request) {
   try {
     const { portalId } = await requireInventoryContext(request)
-    return jsonOk(await getInventoryDashboard(portalId))
+    const cached = unstable_cache(
+      () => getInventoryDashboard(portalId),
+      [`dashboard`, portalId],
+      { revalidate: 60, tags: [`portal:${portalId}:dashboard`] },
+    )
+    return jsonOk(await cached())
   } catch (error) {
     return inventoryErrorResponse(error)
   }
