@@ -94,7 +94,7 @@ export function InventoryGate({ children }: InventoryGateProps) {
     <div className={styles.module}>
       <aside className={styles.inventorySidebar}>
         <div className={styles.inventoryBrand}>
-          <span className={styles.brandMark}>IT</span>
+          <span className={styles.brandMark} aria-hidden="true">H·I</span>
           <div><strong>Inventário</strong><small>Ativos e operações</small></div>
         </div>
         <nav className={styles.sidebarNav} aria-label="Seções do inventário">
