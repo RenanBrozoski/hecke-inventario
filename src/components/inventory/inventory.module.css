@@ -438,6 +438,13 @@
   min-width: 0;
 }
 
+/* Gap automático entre cards consecutivos no fluxo vertical */
+.card + .card,
+.card + .alertsCard,
+.alertsCard + .card {
+  margin-top: 1rem;
+}
+
 .card h2,
 .card h3 {
   margin-bottom: 0.8rem;
@@ -1059,6 +1066,88 @@
     padding: 0 !important;
     margin: 0 !important;
   }
+}
+
+/* ===== Card header row (título + link de ação) ===== */
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.85rem;
+}
+
+.cardHeader h2 {
+  margin: 0;
+}
+
+/* ===== Alertas operacionais (dashboard) ===== */
+
+.alertsCard {
+  border-left: 3px solid var(--color-warning);
+  margin-bottom: 1rem;
+}
+
+.alertsCard h2 {
+  color: var(--color-warning);
+  margin-bottom: 0.65rem;
+}
+
+.alertRows {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.alertRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem 0;
+  font-size: 0.875rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.alertRow:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.alertRow a {
+  flex-shrink: 0;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+/* ===== Stat card color variants ===== */
+
+.statOnline {
+  color: var(--color-success) !important;
+}
+
+.statInactive {
+  color: var(--color-danger) !important;
+}
+
+/* ===== Wallpaper form (AgentFleet) ===== */
+
+.wallpaperForm {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: flex-end;
+}
+
+.wallpaperForm > .field {
+  flex: 1;
+  min-width: 200px;
+}
+
+.wallpaperForm > button {
+  flex: 0 0 auto;
+  align-self: flex-end;
 }
 
 /* ===== Ações remotas ===== */

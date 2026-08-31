@@ -135,21 +135,25 @@ function FleetContent({ context }: { context: InventoryContextResponse }) {
           <span>Total de agentes</span>
         </div>
         <div className={styles.statCard}>
-          <strong style={{ color: 'var(--color-success)' }}>{onlineAgents.length}</strong>
+          <strong className={styles.statOnline}>{onlineAgents.length}</strong>
           <span>Online (24h)</span>
         </div>
         <div className={styles.statCard}>
-          <strong style={{ color: inactiveAgents.length > 0 ? 'var(--color-danger)' : undefined }}>{inactiveAgents.length}</strong>
+          <strong className={inactiveAgents.length > 0 ? styles.statInactive : ''}>{inactiveAgents.length}</strong>
           <span>Inativos (+7 dias)</span>
         </div>
       </div>
 
-      <section className={styles.card} style={{ marginBottom: '1.25rem' }}>
-        <h2>Wallpaper corporativo</h2>
-        <p className={styles.muted} style={{ marginBottom: '0.75rem' }}>
-          Define o wallpaper via política de sistema (HKLM). Selecione agentes na tabela abaixo para enviar a um grupo, ou deixe sem seleção para enviar a todos.
-        </p>
-        <form className={styles.formGrid} onSubmit={sendWallpaper}>
+      <section className={styles.card}>
+        <div className={styles.cardHeader}>
+          <div>
+            <h2>Wallpaper corporativo</h2>
+            <p className={styles.muted}>
+              Selecione agentes na tabela abaixo para enviar a um grupo, ou deixe sem seleção para enviar a todos.
+            </p>
+          </div>
+        </div>
+        <form className={styles.wallpaperForm} onSubmit={sendWallpaper}>
           <div className={styles.field}>
             <label>URL da imagem</label>
             <input
@@ -158,7 +162,6 @@ function FleetContent({ context }: { context: InventoryContextResponse }) {
               value={wpUrl}
               onChange={(e) => setWpUrl(e.target.value)}
               required
-              style={{ width: '100%', minWidth: 320 }}
             />
           </div>
           <div className={styles.field}>
@@ -179,8 +182,8 @@ function FleetContent({ context }: { context: InventoryContextResponse }) {
                 : 'Enviar para todos'}
           </button>
         </form>
-        {wpResult && <p className="alert alert-success" style={{ marginTop: '0.5rem' }}>{wpResult}</p>}
-        {wpError && <p className="alert alert-error" style={{ marginTop: '0.5rem' }}>{wpError}</p>}
+        {wpResult && <p className="alert alert-success">{wpResult}</p>}
+        {wpError && <p className="alert alert-error">{wpError}</p>}
       </section>
 
       {loading ? (
