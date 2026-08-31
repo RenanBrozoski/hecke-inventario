@@ -237,6 +237,11 @@ function PeopleListContent() {
           <button type="button" onClick={() => void downloadCSV()}>↓ Exportar CSV</button>
           <button type="button" onClick={toggleAutoMatch}>⟳ Auto-vincular B24</button>
           <button type="button" onClick={toggleImportOpen}>↑ Importar do Bitrix24</button>
+          {context.canAdmin && (
+            <Link href="/inventory/people/dedupe">
+              <button type="button">⟳ Duplicatas</button>
+            </Link>
+          )}
           {context.canEdit && (
             <Link href="/inventory/people/new">
               <button type="button" className="primary">+ Novo colaborador</button>

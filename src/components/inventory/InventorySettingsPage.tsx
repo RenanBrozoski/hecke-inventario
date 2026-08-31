@@ -295,8 +295,8 @@ function CategoriesSettings({
                 }}
               >
                 {category.name}{' '}
-                <span className={styles.timelineMeta}>
-                  ({category._count?.equipment ?? 0} equipamentos)
+                <span className={styles.categoryMeta}>
+                  ({category._count?.equipment ?? 0} equip.)
                 </span>
               </button>
             ))}

@@ -61,10 +61,10 @@ export function SearchableSelect({
           width: '100%',
           textAlign: 'left',
           padding: '0.4rem 0.6rem',
-          border: '1px solid var(--border, #d1d5db)',
+          border: '1px solid var(--color-border, #272930)',
           borderRadius: 4,
-          background: 'var(--input-bg, var(--card-bg, #fff))',
-          color: value ? 'inherit' : 'var(--text-muted, #9ca3af)',
+          background: 'var(--color-bg-subtle, #1c1d22)',
+          color: value ? 'inherit' : 'var(--color-text-muted, #71757f)',
           cursor: 'pointer',
           fontSize: 'inherit',
           display: 'flex',
@@ -88,10 +88,10 @@ export function SearchableSelect({
             left: 0,
             right: 0,
             zIndex: 200,
-            background: 'var(--card-bg, #fff)',
-            border: '1px solid var(--border, #d1d5db)',
+            background: 'var(--color-bg-elevated, #15161a)',
+            border: '1px solid var(--color-border, #272930)',
             borderRadius: 4,
-            boxShadow: '0 6px 20px rgba(0,0,0,.12)',
+            boxShadow: '0 8px 24px rgba(0,0,0,.55)',
             display: 'flex',
             flexDirection: 'column',
             maxHeight: 260,
@@ -109,10 +109,11 @@ export function SearchableSelect({
               }}
               style={{
                 width: '100%',
-                border: '1px solid var(--border, #d1d5db)',
+                border: '1px solid var(--color-border, #272930)',
                 borderRadius: 3,
                 padding: '0.3rem 0.5rem',
-                background: 'var(--input-bg, #f9fafb)',
+                background: 'var(--color-bg-subtle, #1c1d22)',
+                color: 'inherit',
                 fontSize: 'inherit',
                 outline: 'none',
               }}
@@ -123,8 +124,8 @@ export function SearchableSelect({
               style={{
                 padding: '0.35rem 0.6rem',
                 cursor: 'pointer',
-                color: 'var(--text-muted, #6b7280)',
-                borderBottom: '1px solid var(--border, #e5e7eb)',
+                color: 'var(--color-text-muted, #71757f)',
+                borderBottom: '1px solid var(--color-border, #272930)',
               }}
               onMouseDown={() => select('')}
             >
@@ -140,7 +141,7 @@ export function SearchableSelect({
                   style={{
                     padding: '0.35rem 0.6rem',
                     cursor: 'pointer',
-                    background: o.value === value ? 'var(--primary-bg, #eff6ff)' : undefined,
+                    background: o.value === value ? 'var(--color-primary-dim, rgba(207,125,48,.09))' : undefined,
                     fontWeight: o.value === value ? 600 : undefined,
                   }}
                 >

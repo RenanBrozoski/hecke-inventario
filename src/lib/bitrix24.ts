@@ -51,12 +51,13 @@ async function paginatedGet<T>(method: string, params: Record<string, unknown> =
 }
 
 export async function searchBitrixUsers(query: string): Promise<BitrixUser[]> {
-  // user.get com FILTER[FIND] faz busca parcial por nome, sobrenome e e-mail
+  // FIND é parâmetro top-level em user.get; dentro de FILTER é ignorado
   const result = await post<BitrixUser[]>('user.get', {
-    FILTER: { FIND: query, ACTIVE: true },
+    FIND: query,
+    FILTER: { ACTIVE: true },
   })
   if (!Array.isArray(result)) return []
-  return result.slice(0, 20) // limita para não sobrecarregar o dropdown
+  return result.slice(0, 20)
 }
 
 export async function getBitrixUser(id: string): Promise<BitrixUser | null> {
