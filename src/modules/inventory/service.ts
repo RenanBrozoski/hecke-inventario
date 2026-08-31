@@ -1320,6 +1320,17 @@ export async function createPerson(context: InventoryContext, input: CreatePerso
   try {
     return await prisma.$transaction(async (tx) => {
       await validatePersonRelations(tx, context.portalId, input)
+      if (input.email) {
+        const emailConflict = await tx.inventoryPerson.findFirst({
+          where: { portalId: context.portalId, email: input.email, archivedAt: null },
+          select: { id: true, name: true },
+        })
+        if (emailConflict) {
+          throw new InventoryConflictError(
+            `Já existe uma pessoa cadastrada com o e-mail ${input.email}: ${emailConflict.name}.`,
+          )
+        }
+      }
       const person = await tx.inventoryPerson.create({
         data: {
           portalId: context.portalId,

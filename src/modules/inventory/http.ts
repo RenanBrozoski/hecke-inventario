@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { prisma } from '@/src/lib/prisma'
 import { requireSession } from '@/src/modules/auth/require-session'
 import { SessionValidationError } from '@/src/modules/auth/session'
-import { isPortalAdministrator } from '@/src/modules/bitrix/admin'
+import { checkPortalAdministrator } from '@/src/modules/bitrix/admin'
 
 export interface InventoryContext {
   portalId: string
@@ -55,7 +55,7 @@ const ROLE_LEVEL: Record<InventoryRole, number> = { VIEWER: 0, OPERATOR: 1, ADMI
  */
 export async function requireInventoryContext(request: Request): Promise<InventoryContext> {
   const { portal, user } = await requireSession(request)
-  const portalAdmin = await isPortalAdministrator(portal.id, user.bitrixUserId)
+  const portalAdmin = checkPortalAdministrator(portal, user.bitrixUserId)
   if (portalAdmin) {
     return {
       portalId: portal.id,

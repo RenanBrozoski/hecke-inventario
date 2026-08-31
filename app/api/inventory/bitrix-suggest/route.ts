@@ -1,5 +1,5 @@
 import { inventoryErrorResponse, jsonOk, requireInventoryContext } from '@/src/modules/inventory/http'
-import { searchBitrixUsers } from '@/src/lib/bitrix24'
+import { searchBitrixUsers } from '@/src/modules/bitrix/directory-search'
 import { prisma } from '@/src/lib/prisma'
 
 export const dynamic = 'force-dynamic'
@@ -24,14 +24,19 @@ export async function GET(request: Request) {
     const results = await Promise.all(
       people.map(async (person) => {
         try {
-          const matches = await searchBitrixUsers(person.name)
-          if (!matches.length) return null
+          const { items } = await searchBitrixUsers({
+            portalId: ctx.portalId,
+            search: person.name,
+            activeOnly: true,
+            pageSize: 4,
+          })
+          if (!items.length) return null
           return {
             person: { id: person.id, name: person.name, revision: person.revision },
-            matches: matches.slice(0, 4).map((u) => ({
-              bitrixId: u.ID,
-              bitrixName: `${u.NAME} ${u.LAST_NAME}`.trim(),
-              email: u.EMAIL ?? '',
+            matches: items.map((u) => ({
+              bitrixId: u.bitrixUserId,
+              bitrixName: u.fullName,
+              email: u.email ?? '',
             })),
           }
         } catch {

@@ -1,5 +1,5 @@
 import { inventoryErrorResponse, jsonOk, requireInventoryContext, requireInventoryRole } from '@/src/modules/inventory/http'
-import { getAllActiveBitrixUsers } from '@/src/lib/bitrix24'
+import { getAllActiveBitrixUsers, getBitrixUsersByIds } from '@/src/lib/bitrix24'
 import { prisma } from '@/src/lib/prisma'
 
 export const dynamic = 'force-dynamic'
@@ -49,11 +49,10 @@ export async function POST(request: Request) {
       return jsonOk({ created: 0, skipped: 0 })
     }
 
-    // Fetch the selected users from Bitrix
-    const bitrixUsers = await getAllActiveBitrixUsers()
-    const selectedUsers = bitrixUsers.filter((u) => userIds.includes(u.ID))
+    // Fetch only the selected users from Bitrix (avoids fetching all active users)
+    const selectedUsers = await getBitrixUsersByIds(userIds)
 
-    // Check which already have a link
+    // Check which already have a Bitrix link
     const existingIds = await prisma.inventoryPerson.findMany({
       where: {
         portalId: ctx.portalId,
@@ -66,9 +65,22 @@ export async function POST(request: Request) {
 
     const toCreate = selectedUsers.filter((u) => !alreadyLinked.has(u.ID))
 
-    if (toCreate.length > 0) {
+    // Check for name conflicts with existing unlinked persons to prevent duplicates
+    const existingUnlinked = await prisma.inventoryPerson.findMany({
+      where: { portalId: ctx.portalId, archivedAt: null, bitrixUserId: null },
+      select: { id: true, name: true },
+    })
+    const existingNames = new Set(existingUnlinked.map((p) => p.name.toLowerCase().trim()))
+    const conflicts = toCreate.filter((u) =>
+      existingNames.has(`${u.NAME} ${u.LAST_NAME}`.trim().toLowerCase()),
+    )
+    const safeToCreate = toCreate.filter(
+      (u) => !existingNames.has(`${u.NAME} ${u.LAST_NAME}`.trim().toLowerCase()),
+    )
+
+    if (safeToCreate.length > 0) {
       await prisma.inventoryPerson.createMany({
-        data: toCreate.map((u) => ({
+        data: safeToCreate.map((u) => ({
           portalId: ctx.portalId,
           name: `${u.NAME} ${u.LAST_NAME}`.trim(),
           email: u.EMAIL ?? null,
@@ -80,7 +92,14 @@ export async function POST(request: Request) {
       })
     }
 
-    return jsonOk({ created: toCreate.length, skipped: selectedUsers.length - toCreate.length })
+    return jsonOk({
+      created: safeToCreate.length,
+      skipped: selectedUsers.length - toCreate.length,
+      conflicts: conflicts.map((u) => ({
+        bitrixId: u.ID,
+        name: `${u.NAME} ${u.LAST_NAME}`.trim(),
+      })),
+    })
   } catch (error) {
     return inventoryErrorResponse(error)
   }

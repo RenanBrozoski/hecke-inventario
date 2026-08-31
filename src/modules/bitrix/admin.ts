@@ -37,15 +37,20 @@ function getExtraAdminEntries(): ExtraAdminEntry[] {
  *   2. uma lista extra via env, no formato `portalId:bitrixUserId` (CSV),
  *      escopada por portal (ver getExtraAdminEntries acima).
  */
+export function checkPortalAdministrator(
+  portal: { id: string; installedByBitrixUserId: string },
+  bitrixUserId: string,
+): boolean {
+  if (portal.installedByBitrixUserId === bitrixUserId) return true
+  return getExtraAdminEntries().some(
+    (entry) => entry.portalId === portal.id && entry.bitrixUserId === bitrixUserId,
+  )
+}
+
 export async function isPortalAdministrator(portalId: string, bitrixUserId: string): Promise<boolean> {
   const portal = await prisma.bitrixPortal.findUnique({ where: { id: portalId } })
   if (!portal) return false
-
-  if (portal.installedByBitrixUserId === bitrixUserId) return true
-
-  return getExtraAdminEntries().some(
-    (entry) => entry.portalId === portalId && entry.bitrixUserId === bitrixUserId,
-  )
+  return checkPortalAdministrator(portal, bitrixUserId)
 }
 
 /**
