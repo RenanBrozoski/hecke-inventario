@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { collectorSyncPayloadSchema, syncCollectorMachine } from '@/src/modules/inventory/collector-sync'
 import { getPendingCommands } from '@/src/modules/inventory/collector-commands'
+import { InventoryNotFoundError, InventoryValidationError } from '@/src/modules/inventory/http'
 import { prisma } from '@/src/lib/prisma'
 
 export const dynamic = 'force-dynamic'
@@ -41,9 +42,12 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ sync: result, commands })
   } catch (error) {
-    if (error instanceof z.ZodError) {
+    if (error instanceof z.ZodError)
       return NextResponse.json({ error: 'Payload inválido.', errors: error.issues }, { status: 400 })
-    }
+    if (error instanceof InventoryValidationError)
+      return NextResponse.json({ error: error.message }, { status: 400 })
+    if (error instanceof InventoryNotFoundError)
+      return NextResponse.json({ error: error.message }, { status: 404 })
     const message = error instanceof Error ? error.message : 'Erro interno.'
     return NextResponse.json({ error: message }, { status: 500 })
   }

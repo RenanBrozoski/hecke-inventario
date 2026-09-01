@@ -32,6 +32,15 @@ function nullable(value: string | null | undefined): string | null {
   return value?.trim() || null
 }
 
+/** Normaliza MAC para XX:XX:XX:XX:XX:XX maiúsculo.
+ * Aceita qualquer separador (traço, dois-pontos, ponto, sem separador). */
+function normalizeMac(mac: string | null | undefined): string | null {
+  if (!mac) return null
+  const digits = mac.replace(/[^0-9a-fA-F]/g, '')
+  if (digits.length !== 12) return null
+  return digits.match(/.{2}/g)!.join(':').toUpperCase()
+}
+
 function presentSpecs(specs: Record<string, string | number | null>) {
   return Object.fromEntries(Object.entries(specs).filter(([, v]) => v !== null))
 }
@@ -58,9 +67,21 @@ async function findExistingEquipment(
   }
 
   // 2. MAC address — apenas matches únicos (ambiguidade = conflito)
+  // Tenta o formato normalizado (XX:XX:XX:XX:XX:XX) e o formato com traço (XX-XX-XX-XX-XX-XX),
+  // pois imports legados gravaram MACs com traço enquanto o agente envia com dois-pontos.
   const macFilters: Array<{ specs: { path: string[]; equals: string } }> = []
-  if (machine.macCable) macFilters.push({ specs: { path: ['mac_cabo'], equals: machine.macCable } })
-  if (machine.macWifi) macFilters.push({ specs: { path: ['mac_wifi'], equals: machine.macWifi } })
+  const macNorm = normalizeMac(machine.macCable)
+  const macDash = macNorm ? macNorm.replace(/:/g, '-') : null
+  const wifiNorm = normalizeMac(machine.macWifi)
+  const wifiDash = wifiNorm ? wifiNorm.replace(/:/g, '-') : null
+  if (macNorm) {
+    macFilters.push({ specs: { path: ['mac_cabo'], equals: macNorm } })
+    if (macDash !== macNorm) macFilters.push({ specs: { path: ['mac_cabo'], equals: macDash! } })
+  }
+  if (wifiNorm) {
+    macFilters.push({ specs: { path: ['mac_wifi'], equals: wifiNorm } })
+    if (wifiDash !== wifiNorm) macFilters.push({ specs: { path: ['mac_wifi'], equals: wifiDash! } })
+  }
 
   if (macFilters.length > 0) {
     const byMac = await prisma.inventoryEquipment.findMany({
@@ -133,8 +154,8 @@ export async function syncCollectorMachine(payload: CollectorSyncPayload) {
     ram: nullable(machine.memory),
     ram_pentes: machine.memoryModules ?? null,
     armazenamento: nullable(machine.storage),
-    mac_cabo: nullable(machine.macCable),
-    mac_wifi: nullable(machine.macWifi),
+    mac_cabo: normalizeMac(machine.macCable),
+    mac_wifi: normalizeMac(machine.macWifi),
     ip: nullable(machine.ipAddress),
     placa_mae: motherboard,
     anydesk_id: nullable(machine.anydeskCode),
