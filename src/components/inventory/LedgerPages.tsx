@@ -322,6 +322,82 @@ function ExtensionsContent() {
   )
 }
 
+type ReceivingFormState = {
+  receivedAt: string
+  equipment: string
+  quantity: string
+  tag: string
+  deliveredAt: string
+  deliveredTo: string
+  notes: string
+}
+
+function emptyReceivingForm(): ReceivingFormState {
+  return { receivedAt: '', equipment: '', quantity: '1', tag: '', deliveredAt: '', deliveredTo: '', notes: '' }
+}
+
+function receivingToForm(item: Receiving): ReceivingFormState {
+  return {
+    receivedAt: item.receivedAt?.slice(0, 10) ?? '',
+    equipment: item.equipment ?? '',
+    quantity: String(item.quantity),
+    tag: item.tag ?? '',
+    deliveredAt: item.deliveredAt?.slice(0, 10) ?? '',
+    deliveredTo: item.deliveredTo ?? '',
+    notes: item.notes ?? '',
+  }
+}
+
+function ReceivingForm({
+  form,
+  setForm,
+  onSubmit,
+  saving,
+  submitLabel,
+  onCancel,
+}: {
+  form: ReceivingFormState
+  setForm: (f: ReceivingFormState) => void
+  onSubmit: (e: FormEvent) => void
+  saving: boolean
+  submitLabel: string
+  onCancel?: () => void
+}) {
+  return (
+    <form className={styles.card} onSubmit={onSubmit} style={{ marginBottom: '1rem' }}>
+      <div className={styles.formGrid}>
+        <Field label="Data de recebimento">
+          <input type="date" value={form.receivedAt} onChange={(e) => setForm({ ...form, receivedAt: e.target.value })} />
+        </Field>
+        <Field label="Equipamento">
+          <input value={form.equipment} onChange={(e) => setForm({ ...form, equipment: e.target.value })} />
+        </Field>
+        <Field label="Quantidade">
+          <input type="number" min="1" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} />
+        </Field>
+        <Field label="TAG">
+          <input value={form.tag} onChange={(e) => setForm({ ...form, tag: e.target.value })} />
+        </Field>
+        <Field label="Data de entrega">
+          <input type="date" value={form.deliveredAt} onChange={(e) => setForm({ ...form, deliveredAt: e.target.value })} />
+        </Field>
+        <Field label="Entregue para">
+          <input value={form.deliveredTo} onChange={(e) => setForm({ ...form, deliveredTo: e.target.value })} />
+        </Field>
+        <div className={styles.spanTwo}>
+          <Field label="Observações">
+            <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+          </Field>
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: '0.5rem' }}>
+        <button className="primary" type="submit" disabled={saving}>{saving ? 'Salvando…' : submitLabel}</button>
+        {onCancel && <button type="button" onClick={onCancel}>Cancelar</button>}
+      </div>
+    </form>
+  )
+}
+
 function ReceivingsContent() {
   const context = useInventoryContext()
   const { authorizedFetch } = useSession()
@@ -329,18 +405,14 @@ function ReceivingsContent() {
   const [q, setQ] = useState('')
   const [appliedQ, setAppliedQ] = useState('')
   const [page, setPage] = useState(1)
-  const [form, setForm] = useState({
-    receivedAt: '',
-    equipment: '',
-    quantity: '1',
-    tag: '',
-    deliveredAt: '',
-    deliveredTo: '',
-    notes: '',
-  })
+  const [form, setForm] = useState<ReceivingFormState>(emptyReceivingForm)
   const [showForm, setShowForm] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [editId, setEditId] = useState<string | null>(null)
+  const [editForm, setEditForm] = useState<ReceivingFormState>(emptyReceivingForm)
+  const [editSaving, setEditSaving] = useState(false)
+
   const load = useCallback(async () => {
     setError(null)
     const params = new URLSearchParams({ page: String(page), pageSize: '25' })
@@ -354,15 +426,15 @@ function ReceivingsContent() {
       setError(cause instanceof Error ? cause.message : 'Falha ao carregar os recebimentos.')
     }
   }, [appliedQ, authorizedFetch, page])
-  useEffect(() => {
-    void load()
-  }, [load])
+
+  useEffect(() => { void load() }, [load])
+
   async function create(event: FormEvent) {
     event.preventDefault()
     setSaving(true)
     setError(null)
     try {
-      const nullable = (value: string) => value.trim() || null
+      const nullable = (v: string) => v.trim() || null
       const response = await authorizedFetch('/api/inventory/receivings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -378,15 +450,7 @@ function ReceivingsContent() {
       })
       if (!response.ok)
         throw new Error(await readApiError(response, 'Não foi possível salvar o recebimento.'))
-      setForm({
-        receivedAt: '',
-        equipment: '',
-        quantity: '1',
-        tag: '',
-        deliveredAt: '',
-        deliveredTo: '',
-        notes: '',
-      })
+      setForm(emptyReceivingForm())
       setShowForm(false)
       await load()
     } catch (cause) {
@@ -395,6 +459,51 @@ function ReceivingsContent() {
       setSaving(false)
     }
   }
+
+  async function saveEdit(event: FormEvent) {
+    event.preventDefault()
+    if (!editId) return
+    setEditSaving(true)
+    setError(null)
+    try {
+      const nullable = (v: string) => v.trim() || null
+      const response = await authorizedFetch(`/api/inventory/receivings/${editId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          receivedAt: editForm.receivedAt || null,
+          equipment: nullable(editForm.equipment),
+          quantity: Number(editForm.quantity),
+          tag: nullable(editForm.tag),
+          deliveredAt: editForm.deliveredAt || null,
+          deliveredTo: nullable(editForm.deliveredTo),
+          notes: nullable(editForm.notes),
+        }),
+      })
+      if (!response.ok)
+        throw new Error(await readApiError(response, 'Não foi possível salvar as alterações.'))
+      setEditId(null)
+      await load()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Falha ao salvar as alterações.')
+    } finally {
+      setEditSaving(false)
+    }
+  }
+
+  async function deleteItem(id: string) {
+    if (!confirm('Excluir este recebimento?')) return
+    setError(null)
+    try {
+      const response = await authorizedFetch(`/api/inventory/receivings/${id}`, { method: 'DELETE' })
+      if (!response.ok)
+        throw new Error(await readApiError(response, 'Não foi possível excluir.'))
+      await load()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Falha ao excluir.')
+    }
+  }
+
   return (
     <div>
       <Header
@@ -405,70 +514,16 @@ function ReceivingsContent() {
         setOpen={setShowForm}
       />
       {showForm && (
-        <form className={styles.card} onSubmit={create} style={{ marginBottom: '1rem' }}>
-          <div className={styles.formGrid}>
-            <Field label="Data de recebimento">
-              <input
-                type="date"
-                value={form.receivedAt}
-                onChange={(event) => setForm({ ...form, receivedAt: event.target.value })}
-              />
-            </Field>
-            <Field label="Equipamento">
-              <input
-                value={form.equipment}
-                onChange={(event) => setForm({ ...form, equipment: event.target.value })}
-              />
-            </Field>
-            <Field label="Quantidade">
-              <input
-                type="number"
-                min="1"
-                value={form.quantity}
-                onChange={(event) => setForm({ ...form, quantity: event.target.value })}
-              />
-            </Field>
-            <Field label="TAG">
-              <input
-                value={form.tag}
-                onChange={(event) => setForm({ ...form, tag: event.target.value })}
-              />
-            </Field>
-            <Field label="Data de entrega">
-              <input
-                type="date"
-                value={form.deliveredAt}
-                onChange={(event) => setForm({ ...form, deliveredAt: event.target.value })}
-              />
-            </Field>
-            <Field label="Entregue para">
-              <input
-                value={form.deliveredTo}
-                onChange={(event) => setForm({ ...form, deliveredTo: event.target.value })}
-              />
-            </Field>
-            <div className={styles.spanTwo}>
-              <Field label="Observações">
-                <textarea
-                  value={form.notes}
-                  onChange={(event) => setForm({ ...form, notes: event.target.value })}
-                />
-              </Field>
-            </div>
-          </div>
-          <button className="primary" type="submit" disabled={saving}>
-            {saving ? 'Salvando…' : 'Salvar recebimento'}
-          </button>
-        </form>
+        <ReceivingForm
+          form={form}
+          setForm={setForm}
+          onSubmit={create}
+          saving={saving}
+          submitLabel="Salvar recebimento"
+          onCancel={() => setShowForm(false)}
+        />
       )}
-      <Search
-        value={q}
-        setValue={setQ}
-        onSubmit={() => {
-          setAppliedQ(q)
-          setPage(1)
-        }}
-      />
+      <Search value={q} setValue={setQ} onSubmit={() => { setAppliedQ(q); setPage(1) }} />
       {error && <p className="alert alert-error">{error}</p>}
       {!data ? (
         <p className={styles.loading}>Carregando recebimentos…</p>
@@ -476,6 +531,16 @@ function ReceivingsContent() {
         <p className={`${styles.card} ${styles.empty}`}>Nenhum recebimento encontrado.</p>
       ) : (
         <>
+          {editId && (
+            <ReceivingForm
+              form={editForm}
+              setForm={setEditForm}
+              onSubmit={saveEdit}
+              saving={editSaving}
+              submitLabel="Salvar alterações"
+              onCancel={() => setEditId(null)}
+            />
+          )}
           <div className={styles.tableWrap}>
             <table>
               <thead>
@@ -486,17 +551,38 @@ function ReceivingsContent() {
                   <th>TAG</th>
                   <th>Entregue em</th>
                   <th>Entregue para</th>
+                  <th>Obs.</th>
+                  {context.canEdit && <th />}
                 </tr>
               </thead>
               <tbody>
                 {data.items.map((item) => (
-                  <tr key={item.id}>
+                  <tr key={item.id} style={editId === item.id ? { background: 'var(--color-bg-subtle, rgba(0,0,0,.04))' } : undefined}>
                     <td>{formatDate(item.receivedAt)}</td>
                     <td>{item.equipment || '—'}</td>
                     <td>{item.quantity}</td>
                     <td>{item.tag || '—'}</td>
                     <td>{formatDate(item.deliveredAt)}</td>
                     <td>{item.deliveredTo || '—'}</td>
+                    <td style={{ maxWidth: 200, whiteSpace: 'normal', fontSize: '0.8rem' }}>{item.notes || '—'}</td>
+                    {context.canEdit && (
+                      <td style={{ whiteSpace: 'nowrap' }}>
+                        <button
+                          type="button"
+                          style={{ fontSize: '0.75rem', padding: '0.15rem 0.5rem', marginRight: '0.25rem' }}
+                          onClick={() => { setEditId(item.id); setEditForm(receivingToForm(item)) }}
+                        >
+                          Editar
+                        </button>
+                        <button
+                          type="button"
+                          style={{ fontSize: '0.75rem', padding: '0.15rem 0.5rem', color: 'var(--color-danger, #d44)' }}
+                          onClick={() => void deleteItem(item.id)}
+                        >
+                          Excluir
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

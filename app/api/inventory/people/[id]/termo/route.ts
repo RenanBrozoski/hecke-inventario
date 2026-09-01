@@ -43,12 +43,14 @@ const bodySchema = z.object({
   templateId: z.string().optional(),
   // legacy fallback
   model: z.enum(['CLT_HECKE', 'PJ_HECKE', 'CLT_MARKETMOVE', 'PJ_MARKETMOVE']).optional(),
+  personName: z.string().trim().max(300).optional(),
   cpf: z.string().trim().max(20).optional(),
   companyName: z.string().trim().max(300).optional(),
   companyCnpj: z.string().trim().max(30).optional(),
   representativeName: z.string().trim().max(300).optional(),
   representativeCpf: z.string().trim().max(20).optional(),
   extraEquipment: z.array(extraEqSchema).max(50).optional(),
+  excludeEquipmentIds: z.array(z.string()).max(500).optional(),
 })
 
 type RouteContext = { params: Promise<{ id: string }> }
@@ -60,7 +62,9 @@ export async function POST(request: Request, route: RouteContext) {
     const body = bodySchema.parse(await parseJsonBody(request))
 
     const person = await getPerson(portalId, id)
-    const activeEquipment = (person.equipment ?? []).filter((e) => !e.archivedAt)
+    const excludeSet = new Set(body.excludeEquipmentIds ?? [])
+    const activeEquipment = (person.equipment ?? [])
+      .filter((e) => !e.archivedAt && !excludeSet.has(e.id))
 
     // Resolve employer config from templateId (preferred) or legacy model
     let isPJ: boolean
@@ -95,25 +99,31 @@ export async function POST(request: Request, route: RouteContext) {
       isPJ,
       isMarketMove,
       dateFormat,
-      person: person as {
-        name: string
-        title?: string | null
-        department?: { name: string } | null
-        employmentType?: string | null
+      person: {
+        name: body.personName ?? person.name,
+        title: (person as { title?: string | null }).title,
+        department: (person as { department?: { name: string } | null }).department,
+        employmentType: (person as { employmentType?: string | null }).employmentType,
       },
       cpf: body.cpf,
       companyName: body.companyName,
       companyCnpj: body.companyCnpj,
       representativeName: body.representativeName,
       representativeCpf: body.representativeCpf,
-      equipment: activeEquipment as Array<{
-        category: { name: string }
-        name?: string | null
-        patrimony?: string | null
-        assetTag?: string | null
-        serialNumber?: string | null
-        status: string
-      }>,
+      equipment: activeEquipment.map((eq) => {
+        const specs = (eq as { specs?: Record<string, unknown> | null }).specs
+        const chargerSerial = typeof specs?.['serial_carregador'] === 'string' && specs['serial_carregador']
+          ? (specs['serial_carregador'] as string) : null
+        return {
+          category: (eq as { category: { name: string } }).category,
+          name: (eq as { name?: string | null }).name,
+          patrimony: (eq as { patrimony?: string | null }).patrimony,
+          assetTag: (eq as { assetTag?: string | null }).assetTag,
+          serialNumber: (eq as { serialNumber?: string | null }).serialNumber,
+          status: (eq as { status: string }).status,
+          chargerSerial,
+        }
+      }),
       extraEquipment: body.extraEquipment ?? [],
     })
 
@@ -197,6 +207,7 @@ function buildDocx(opts: {
     patrimony?: string | null
     assetTag?: string | null
     serialNumber?: string | null
+    chargerSerial?: string | null
     status: string
   }>
   extraEquipment: Array<{ category: string; description: string; patrimony: string; serialNumber: string }>
@@ -209,11 +220,15 @@ function buildDocx(opts: {
 
   // ── Equipment table (4 cols: ITEM | MARCA/MODELO | N/S/ID/IMEI | CHECK) ──
   const allEq: Array<{ item: string; modelo: string; ns: string }> = [
-    ...equipment.map((eq) => ({
-      item: eq.category.name,
-      modelo: [eq.name, eq.patrimony].filter(Boolean).join(' / '),
-      ns: eq.serialNumber ?? '—',
-    })),
+    ...equipment.map((eq) => {
+      const nsParts = [eq.serialNumber ?? '—']
+      if (eq.chargerSerial) nsParts.push(`Carregador: ${eq.chargerSerial}`)
+      return {
+        item: eq.category.name,
+        modelo: [eq.name, eq.patrimony].filter(Boolean).join(' / '),
+        ns: nsParts.join(' | '),
+      }
+    }),
     ...extraEquipment.map((eq) => ({
       item: eq.category || '—',
       modelo: [eq.description, eq.patrimony].filter(Boolean).join(' / ') || '—',

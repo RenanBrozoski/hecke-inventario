@@ -42,12 +42,14 @@ function TermoContent({ personId }: { personId: string }) {
   const [error, setError] = useState<string | null>(null)
   const [templates, setTemplates] = useState<TermoTemplate[]>([])
   const [templateId, setTemplateId] = useState<string>('')
+  const [personNameOverride, setPersonNameOverride] = useState('')
   const [cpf, setCpf] = useState('')
   const [companyName, setCompanyName] = useState('')
   const [companyCnpj, setCompanyCnpj] = useState('')
   const [representativeName, setRepresentativeName] = useState('')
   const [representativeCpf, setRepresentativeCpf] = useState('')
   const [extraEquipment, setExtraEquipment] = useState<ExtraEq[]>([])
+  const [excludedEqIds, setExcludedEqIds] = useState<Set<string>>(new Set())
   const [downloading, setDownloading] = useState(false)
   const [downloadError, setDownloadError] = useState<string | null>(null)
 
@@ -97,6 +99,7 @@ function TermoContent({ personId }: { personId: string }) {
     setDownloadError(null)
     try {
       const body: Record<string, unknown> = { templateId }
+      if (personNameOverride.trim()) body.personName = personNameOverride.trim()
       if (!isPJ && cpf.trim()) body.cpf = cpf.trim()
       if (isPJ) {
         if (companyName.trim()) body.companyName = companyName.trim()
@@ -108,6 +111,7 @@ function TermoContent({ personId }: { personId: string }) {
         (e) => e.category.trim() || e.description.trim() || e.patrimony.trim(),
       )
       if (validExtra.length > 0) body.extraEquipment = validExtra
+      if (excludedEqIds.size > 0) body.excludeEquipmentIds = [...excludedEqIds]
       const response = await authorizedFetch(`/api/inventory/people/${personId}/termo`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -174,6 +178,14 @@ function TermoContent({ personId }: { personId: string }) {
               ))}
             </select>
           </div>
+          <div className={styles.field}>
+            <label>Nome no termo (opcional)</label>
+            <input
+              placeholder={person.name}
+              value={personNameOverride}
+              onChange={(e) => setPersonNameOverride(e.target.value)}
+            />
+          </div>
           {!isPJ && (
             <div className={styles.field}>
               <label>CPF do colaborador</label>
@@ -205,6 +217,44 @@ function TermoContent({ personId }: { personId: string }) {
             </>
           )}
         </div>
+
+        {/* Equipamentos vinculados ao colaborador */}
+        {activeEquipment.length > 0 && (
+          <div style={{ marginTop: '1rem' }}>
+            <strong style={{ fontSize: '0.9rem' }}>Equipamentos vinculados ao colaborador</strong>
+            <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted, #888)', margin: '0.25rem 0 0.5rem' }}>
+              Desmarque os que não devem aparecer no termo.
+            </p>
+            {activeEquipment.map((eq) => {
+              const checked = !excludedEqIds.has(eq.id)
+              const chargerSerial = typeof eq.specs?.['serial_carregador'] === 'string' ? eq.specs['serial_carregador'] : null
+              return (
+                <label key={eq.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', marginBottom: '0.25rem', cursor: 'pointer', fontSize: '0.85rem' }}>
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() =>
+                      setExcludedEqIds((prev) => {
+                        const next = new Set(prev)
+                        if (next.has(eq.id)) next.delete(eq.id)
+                        else next.add(eq.id)
+                        return next
+                      })
+                    }
+                    style={{ marginTop: '0.15rem' }}
+                  />
+                  <span style={{ opacity: checked ? 1 : 0.45 }}>
+                    <strong>{eq.category.name}</strong>
+                    {eq.patrimony ? ` · ${eq.patrimony}` : ''}
+                    {eq.name ? ` — ${eq.name}` : ''}
+                    {eq.serialNumber ? ` (N/S: ${eq.serialNumber})` : ''}
+                    {chargerSerial ? <em style={{ color: 'var(--color-text-muted, #888)' }}> · Carregador: {chargerSerial}</em> : null}
+                  </span>
+                </label>
+              )
+            })}
+          </div>
+        )}
 
         {/* Equipamentos extras */}
         <div style={{ marginTop: '1rem' }}>
@@ -262,7 +312,8 @@ function TermoContent({ personId }: { personId: string }) {
       <div className={styles.termoDocument}>
         <TermoDocument
           person={person}
-          equipment={activeEquipment}
+          personNameOverride={personNameOverride.trim() || null}
+          equipment={activeEquipment.filter((e) => !excludedEqIds.has(e.id))}
           today={today}
           employer={employer}
           employerRole={employerRole}
@@ -346,6 +397,7 @@ function ExistingEquipmentAdder({
 
 function TermoDocument({
   person,
+  personNameOverride,
   equipment,
   today,
   employer,
@@ -362,6 +414,7 @@ function TermoDocument({
   extraEquipment,
 }: {
   person: PersonDetail
+  personNameOverride: string | null
   equipment: EquipmentSummary[]
   today: string
   employer: { name: string; cnpj: string }
@@ -377,16 +430,22 @@ function TermoDocument({
   representativeCpf: string
   extraEquipment: ExtraEq[]
 }) {
+  const displayName = personNameOverride || person.name
   const allEquipment = [
-    ...equipment.map((eq, i) => ({
-      num: i + 1,
-      category: eq.category.name,
-      description: eq.name ?? '—',
-      patrimony: eq.patrimony ?? '—',
-      assetTag: eq.assetTag ?? '—',
-      serialNumber: eq.serialNumber ?? '—',
-      status: EQUIPMENT_STATUS_LABELS[eq.status],
-    })),
+    ...equipment.map((eq, i) => {
+      const chargerSerial = typeof eq.specs?.['serial_carregador'] === 'string' && eq.specs['serial_carregador']
+        ? eq.specs['serial_carregador'] as string : null
+      return {
+        num: i + 1,
+        category: eq.category.name,
+        description: eq.name ?? '—',
+        patrimony: eq.patrimony ?? '—',
+        assetTag: eq.assetTag ?? '—',
+        serialNumber: eq.serialNumber ?? '—',
+        chargerSerial,
+        status: EQUIPMENT_STATUS_LABELS[eq.status],
+      }
+    }),
     ...extraEquipment.map((eq, i) => ({
       num: equipment.length + i + 1,
       category: eq.category || '—',
@@ -394,6 +453,7 @@ function TermoDocument({
       patrimony: eq.patrimony || '—',
       assetTag: '—',
       serialNumber: eq.serialNumber || '—',
+      chargerSerial: null as string | null,
       status: 'Ativo',
     })),
   ]
@@ -427,7 +487,7 @@ function TermoDocument({
         </p>
       ) : (
         <p className={styles.termoParagraph}>
-          <strong>{person.name.toUpperCase()}</strong>
+          <strong>{displayName.toUpperCase()}</strong>
           {cpf ? `, inscrito no CPF sob nº ${cpf}` : ''}
           {', doravante simplesmente designado '}
           <em>{employeeRole}</em>{'.'}
@@ -480,7 +540,7 @@ function TermoDocument({
             <th>Descrição / Marca&nbsp;&amp;&nbsp;Modelo</th>
             <th>Cód. interno</th>
             <th>TAG patrimonial</th>
-            <th>N/S · ID</th>
+            <th>N/S · ID · Carregador</th>
             <th>Situação</th>
             <th>✓</th>
           </tr>
@@ -500,7 +560,12 @@ function TermoDocument({
                 <td>{eq.description}</td>
                 <td>{eq.patrimony}</td>
                 <td>{eq.assetTag}</td>
-                <td>{eq.serialNumber}</td>
+                <td>
+                  {eq.serialNumber}
+                  {eq.chargerSerial && (
+                    <><br /><span style={{ fontSize: '0.8em', color: '#666' }}>Carregador: {eq.chargerSerial}</span></>
+                  )}
+                </td>
                 <td>{eq.status}</td>
                 <td>☐</td>
               </tr>
@@ -623,7 +688,7 @@ function TermoDocument({
         </div>
         <div className={styles.termoSignatureBlock}>
           <div className={styles.termoSignatureLine} />
-          <p>{person.name.toUpperCase()}</p>
+          <p>{displayName.toUpperCase()}</p>
           <p>
             <em>{employeeRole}</em>
           </p>

@@ -65,7 +65,10 @@ export function equipmentLabel(item: {
   name?: string | null
   id: string
 }): string {
-  return [item.patrimony, item.name].filter(Boolean).join(' — ') || `#${item.id}`
+  const parts: string[] = []
+  if (item.patrimony) parts.push(item.patrimony)
+  if (item.name && item.name.toLowerCase() !== (item.patrimony ?? '').toLowerCase()) parts.push(item.name)
+  return parts.join(' — ') || `#${item.id}`
 }
 
 export async function readApiError(response: Response, fallback: string): Promise<string> {
