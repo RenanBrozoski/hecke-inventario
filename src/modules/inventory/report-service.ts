@@ -246,11 +246,65 @@ export async function listInventoryAudit(
   }
 }
 
+const STATUS_LABELS: Record<string, string> = {
+  ACTIVE: 'Ativo',
+  INACTIVE: 'Inativo',
+  MAINTENANCE: 'Manutenção',
+  RESERVED: 'Reserva',
+  DISPOSED: 'Descartado',
+}
+
+// Chaves de specs que são internas ou que não têm label para exibição
+const SPEC_SKIP = new Set(['collector', 'sistema_operacional', 'anydesk_id', 'ip'])
+
+const SPEC_LABELS: Record<string, string> = {
+  windows: 'SO',
+  processador: 'Processador',
+  placa_video: 'Placa de Vídeo',
+  placa_mae: 'Placa Mãe',
+  ram: 'RAM',
+  ram_pentes: 'Pentes de RAM',
+  hd_ssd: 'HD/SSD',
+  armazenamento: 'Armazenamento',
+  antivirus: 'Antivírus',
+  ip_address: 'IP',
+  mac_cabo: 'MAC (Cabo)',
+  mac_wifi: 'MAC (Wi-Fi)',
+  ip_fixo: 'IP Fixo',
+  credencial_rede: 'Credencial de Rede',
+  modelo: 'Modelo',
+  numero_modelo: 'Nº Modelo',
+  memoria: 'Memória',
+  imei1: 'IMEI 1',
+  imei2: 'IMEI 2',
+  telefone1: 'Telefone 1',
+  telefone2: 'Telefone 2',
+  telefone3: 'Telefone 3',
+  mac: 'MAC',
+  email_vinculado: 'E-mail vinculado',
+  email_usuario: 'E-mail do usuário',
+  login_cigam: 'Login CIGAM',
+  id_dispositivo: 'ID Dispositivo',
+  serial_carregador: 'Série Carregador',
+}
+
+function formatSpecsForCsv(specs: unknown): string {
+  if (!specs || typeof specs !== 'object' || Array.isArray(specs)) return ''
+  return Object.entries(specs as Record<string, unknown>)
+    .filter(([key, val]) => !SPEC_SKIP.has(key) && val !== null && val !== undefined && val !== '')
+    .map(([key, val]) => {
+      const label = SPEC_LABELS[key] ?? key
+      return `${label}: ${String(val)}`
+    })
+    .join(' | ')
+}
+
 function csvValue(value: unknown): string {
   if (value === null || value === undefined) return ''
   if (typeof value === 'boolean') return value ? 'Sim' : 'Não'
-  if (typeof value === 'object') return JSON.stringify(value)
-  const text = String(value)
+  if (typeof value === 'object') return formatSpecsForCsv(value)
+  // Substitui quebras de linha por " | " para manter tudo numa célula só
+  const text = String(value).replace(/\r?\n/g, ' | ').replace(/\r/g, ' | ')
   // Impede que Excel/LibreOffice interpretem dados controlados por usuário
   // como fórmulas ao abrir o arquivo.
   return /^[\t\r ]*[=+\-@]/.test(text) ? `'${text}` : text
@@ -332,7 +386,6 @@ export async function exportInventoryEquipmentCsv(
     'Entrega',
     'Fim da garantia',
     ...(categoryId ? fieldColumns.map((field) => field.label) : ['Especificações']),
-    'Valores legados para revisão',
     'Observações',
   ]
   const rows: unknown[][] = [headers]
@@ -343,7 +396,7 @@ export async function exportInventoryEquipmentCsv(
       item.assetTag,
       item.name,
       item.category.name,
-      item.status,
+      STATUS_LABELS[item.status] ?? item.status,
       item.currentHolder?.name,
       item.department?.name,
       item.location?.name,
@@ -353,7 +406,6 @@ export async function exportInventoryEquipmentCsv(
       item.deliveredAt ? dateOnly(item.deliveredAt) : null,
       item.warrantyEndsAt ? dateOnly(item.warrantyEndsAt) : null,
       ...(categoryId ? fieldColumns.map((field) => specs[field.key]) : [specs]),
-      redactPasswordValues(item.legacyInvalidSpecs, item.category.fields),
       item.notes,
     ])
   }
