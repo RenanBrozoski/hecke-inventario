@@ -286,6 +286,10 @@ const SPEC_LABELS: Record<string, string> = {
   login_cigam: 'Login CIGAM',
   id_dispositivo: 'ID Dispositivo',
   serial_carregador: 'Série Carregador',
+  login: 'Login',
+  acesso: 'Acesso',
+  tipo: 'Tipo',
+  pim: 'PIM',
 }
 
 function formatSpecsForCsv(specs: unknown): string {

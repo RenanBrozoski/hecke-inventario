@@ -339,6 +339,7 @@ async function importSmartphones(
     if (str(row[16])) specs.telefone2 = str(row[16])!
     if (str(row[17])) specs.telefone3 = str(row[17])!
     if (str(row[18])) specs.mac = str(row[18])!
+    if (str(row[19])) specs.serial_carregador = str(row[19])!
     if (str(row[20])) specs.email_vinculado = str(row[20])!
     if (str(row[22])) specs.email_usuario = str(row[22])!
     if (str(row[23])) specs.login_cigam = str(row[23])!
@@ -437,6 +438,124 @@ async function importRadios(
   return count
 }
 
+async function importServersAndEquipment(
+  wb: XLSX.WorkBook,
+  prisma: PrismaClient,
+  portalId: string,
+  cats: Map<string, string>,
+): Promise<number> {
+  // Cols: 0=Tipo, 1=TAG, 2=Dispositivo(nome), 3=IP, 4=Login, 5=Senha(skip),
+  //       6=Nome(modelo), 7=Descrição, 8=MACcabo, 9=MACwifi, 10=Acesso, 11=PROBLEMA
+  const sheetName = wb.SheetNames.find(
+    (n) => n.toLowerCase().includes('serv') || n.toLowerCase().includes('equip'),
+  )
+  if (!sheetName) { console.warn('  Aba Servidores/Equipamentos não encontrada.'); return 0 }
+  const data = rows(wb, sheetName)
+
+  function resolveCategory(tipo: string): string | null {
+    const t = tipo.toLowerCase().trim()
+    if (!t) return null
+    if (t === 'servidor' || t === 'ilo 4' || t === 'ilo4') return 'Servidor'
+    if (t === 'impressora') return 'Impressora'
+    if (
+      t.includes('roteador') || t.includes('twibi') || t.includes('deco') ||
+      t === 'balanceador' || t.includes('tim') && t.includes('roteador')
+    ) return 'Roteador/Wi-Fi'
+    if (t.includes('switch') || t.includes('swtich')) return 'Switch'
+    if (t.startsWith('facial')) return 'Leitor Facial'
+    if (t === 'tv escritorio' || t === 'tv') return 'TV'
+    if (t === 'sistema de alarme') return 'Segurança'
+    // Cabeçalhos de seção ou tipos a ignorar
+    if (['roteadores', 'swtichs', 'notebooks', 'notebook', 'equipamento sw'].includes(t)) return null
+    return null
+  }
+
+  let count = 0
+  for (const row of data) {
+    const tipo = str(row[0])
+    if (!tipo) continue
+    const catName = resolveCategory(tipo)
+    if (!catName) continue
+    const name = str(row[2])
+    if (!name) continue // linha de cabeçalho de seção sem dispositivo
+
+    const prefix: Record<string, string> = {
+      'Servidor': 'SRV', 'Impressora': 'IMP', 'Roteador/Wi-Fi': 'RT',
+      'Switch': 'SW', 'Leitor Facial': 'LF', 'TV': 'TV', 'Segurança': 'SEG',
+    }
+    const catId = await ensureCategory(prisma, portalId, catName, prefix[catName] ?? null, cats)
+
+    const specs: Record<string, string> = {}
+    if (str(row[3])) specs.ip_address = str(row[3])!
+    if (str(row[4])) specs.login = str(row[4])!
+    if (str(row[6])) specs.modelo = str(row[6])!
+    if (str(row[8])) specs.mac_cabo = str(row[8])!
+    if (str(row[9])) specs.mac_wifi = str(row[9])!
+    if (str(row[10])) specs.acesso = str(row[10])!
+
+    const notes = [str(row[7]), str(row[11])].filter(Boolean).join(' | ') || null
+
+    await prisma.inventoryEquipment.create({
+      data: {
+        portalId,
+        assetTag: str(row[1]),
+        name,
+        categoryId: catId,
+        status: 'ACTIVE',
+        notes,
+        specs,
+      },
+    })
+    count++
+  }
+  console.log(`  Servidores/Equipamentos: ${count} equipamentos`)
+  return count
+}
+
+async function importTablets(
+  wb: XLSX.WorkBook,
+  prisma: PrismaClient,
+  portalId: string,
+  catId: string,
+  depts: Map<string, string>,
+  people: Map<string, string>,
+): Promise<number> {
+  // Cols: 0=ID(HECKE_005), 1=Tipo, 2=Dispositivo(modelo), 3=IMEI1, 4=IMEI2,
+  //       5=MACfio, 6=MACwifi, 7=OBS, 8=UTILIZAÇÃO(holder), 9=EMAIL, 10=PIM
+  const sheetName = wb.SheetNames.find((n) => n.toLowerCase().includes('tablet'))
+  if (!sheetName) { console.warn('  Aba Tablets não encontrada.'); return 0 }
+  const data = rows(wb, sheetName)
+  let count = 0
+  for (const row of data) {
+    if (!matchesCode(row[0], /^HECKE_\d+/i)) continue
+    const holderName = normHolder(row[8])
+    const holderId = holderName ? await ensurePerson(prisma, portalId, holderName, null, people) : null
+    const specs: Record<string, string> = {}
+    if (str(row[1])) specs.tipo = str(row[1])!
+    if (row[3] != null) specs.imei1 = String(row[3])
+    if (row[4] != null) specs.imei2 = String(row[4])
+    if (str(row[5])) specs.mac_cabo = str(row[5])!
+    if (str(row[6])) specs.mac_wifi = str(row[6])!
+    if (str(row[9])) specs.email_vinculado = str(row[9])!
+    if (str(row[10])) specs.pim = str(row[10])!
+    await prisma.inventoryEquipment.create({
+      data: {
+        portalId,
+        patrimony: str(row[0])!,
+        name: str(row[2]) ?? str(row[1]),
+        categoryId: catId,
+        currentHolderId: holderId,
+        status: 'ACTIVE',
+        notes: str(row[7]),
+        specs,
+      },
+    })
+    count++
+  }
+  console.log(`  Tablet: ${count} equipamentos`)
+  return count
+}
+
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
@@ -473,6 +592,7 @@ async function main() {
     const catSmartphone = await ensureCategory(prisma, portal.id, 'Smartphone', 'SM', cats)
     const catColetor = await ensureCategory(prisma, portal.id, 'Coletor', 'CTR', cats)
     const catRadio = await ensureCategory(prisma, portal.id, 'Rádio', 'RC', cats)
+    const catTablet = await ensureCategory(prisma, portal.id, 'Tablet', 'TB', cats)
 
     console.log('Importando...')
     let total = 0
@@ -482,6 +602,8 @@ async function main() {
     total += await importSmartphones(wb, prisma, portal.id, catSmartphone, depts, people)
     total += await importColetores(wb, prisma, portal.id, catColetor)
     total += await importRadios(wb, prisma, portal.id, catRadio, depts, people)
+    total += await importServersAndEquipment(wb, prisma, portal.id, cats)
+    total += await importTablets(wb, prisma, portal.id, catTablet, depts, people)
 
     console.log(`\n✓ Total: ${total} equipamentos, ${people.size} colaboradores, ${depts.size} setores`)
   } finally {
